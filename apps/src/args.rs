@@ -24,6 +24,7 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::time::Duration;
 use super::common::alpns;
 use std::time::Duration;
 
@@ -189,8 +190,7 @@ impl Args for CommonArgs {
                 None
             };
 
-        let initial_rtt_millis =
-            args.get_str("--initial-rtt").parse::<u64>().unwrap();
+        let initial_rtt_millis = args.get_str("--initial-rtt").parse::<u64>().unwrap();
         let initial_rtt = Duration::from_millis(initial_rtt_millis);
 
         let initial_cwnd_packets = args
