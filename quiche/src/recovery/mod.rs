@@ -112,7 +112,7 @@ pub struct RecoveryConfig {
 impl RecoveryConfig {
     pub fn from_config(config: &Config) -> Self {
         Self {
-            initial_rtt: config.initial_rtt,
+            initial_rtt: config.local_transport_params.initial_rtt,
             max_send_udp_payload_size: config.max_send_udp_payload_size,
             max_ack_delay: Duration::ZERO,
             cc_algorithm: config.cc_algorithm,
