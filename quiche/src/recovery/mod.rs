@@ -285,6 +285,8 @@ pub enum CongestionControlAlgorithm {
     /// BBRv2 congestion control algorithm implementation from gcongestion
     /// branch. `bbr2_gcongestion` in a string form.
     Bbr2Gcongestion = 4,
+    /// A no-op congestion algorithm.
+    NoOp,
 }
 
 impl FromStr for CongestionControlAlgorithm {
