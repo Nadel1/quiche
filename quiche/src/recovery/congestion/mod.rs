@@ -25,8 +25,7 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use debug_panic::debug_panic;
-use std::time::Duration;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use self::recovery::Acked;
 use super::bandwidth::Bandwidth;
