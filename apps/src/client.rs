@@ -362,9 +362,9 @@ pub fn connect(
 
         // Create a new application protocol session once the QUIC connection is
         // established.
-        if (conn.is_established() || conn.is_in_early_data()) &&
-            (!args.perform_migration || migrated) &&
-            !app_proto_selected
+        if (conn.is_established() || conn.is_in_early_data())
+            && (!args.perform_migration || migrated)
+            && !app_proto_selected
         {
             // At this stage the ALPN negotiation succeeded and selected a
             // single application protocol name. We'll use this to construct
@@ -470,40 +470,53 @@ pub fn connect(
                 break;
             }
 
-            scid_sent = true;
-        }
+            // Handle path events.
+            while let Some(qe) = conn.path_event_next() {
+                match qe {
+                    quiche::PathEvent::New(..) => unreachable!(),
 
-        if args.perform_migration &&
-            !new_path_probed &&
-            scid_sent &&
-            conn.available_dcids() > 0
-        {
-            let additional_local_addr =
-                migrate_socket.as_ref().unwrap().local_addr().unwrap();
-            conn.probe_path(additional_local_addr, peer_addr).unwrap();
+                    quiche::PathEvent::Validated(local_addr, peer_addr) => {
+                        info!(
+                            "Path ({}, {}) is now validated",
+                            local_addr, peer_addr
+                        );
+                        conn.migrate(local_addr, peer_addr).unwrap();
+                        migrated = true;
+                    },
 
-            new_path_probed = true;
-        }
+                    quiche::PathEvent::FailedValidation(
+                        local_addr,
+                        peer_addr,
+                    ) => {
+                        info!(
+                            "Path ({}, {}) failed validation",
+                            local_addr, peer_addr
+                        );
+                    },
 
-        // Generate outgoing QUIC packets and send them on the UDP socket, until
-        // quiche reports that there are no more packets to be sent.
-        let mut sockets = vec![&socket];
-        if let Some(migrate_socket) = migrate_socket.as_ref() {
-            sockets.push(migrate_socket);
-        }
+                    quiche::PathEvent::Closed(local_addr, peer_addr) => {
+                        info!(
+                            "Path ({}, {}) is now closed and unusable",
+                            local_addr, peer_addr
+                        );
+                    },
 
-        for socket in sockets {
-            let local_addr = socket.local_addr().unwrap();
+                    quiche::PathEvent::ReusedSourceConnectionId(
+                        cid_seq,
+                        old,
+                        new,
+                    ) => {
+                        info!(
+                            "Peer reused cid seq {} (initially {:?}) on {:?}",
+                            cid_seq, old, new
+                        );
+                    },
 
-            for peer_addr in conn.paths_iter(local_addr) {
-                loop {
-                    let (write, send_info) = match conn.send_on_path(
-                        &mut out,
-                        Some(local_addr),
-                        Some(peer_addr),
-                    ) {
-                        Ok(v) => v,
+                    quiche::PathEvent::PeerMigrated(..) => unreachable!(),
+                }
+            }
 
+<<<<<<< HEAD
                         Err(quiche::Error::Done) => {
                             trace!("{local_addr} -> {peer_addr}: done writing");
                             break;
@@ -513,66 +526,132 @@ pub fn connect(
                             error!(
                                 "{local_addr} -> {peer_addr}: send failed: {e:?}"
                             );
+=======
+            // See whether source Connection IDs have been retired.
+            while let Some(retired_scid) = conn.retired_scid_next() {
+                info!("Retiring source CID {:?}", retired_scid);
+            }
 
-                            conn.close(false, 0x1, b"fail").ok();
-                            break;
-                        },
-                    };
+            // Provides as many CIDs as possible.
+            while conn.scids_left() > 0 {
+                let (scid, reset_token) = generate_cid_and_reset_token(&rng);
+>>>>>>> f6a68758 (work on making quiche send multiple requests)
 
-                    if let Err(e) = socket.send_to(&out[..write], send_info.to) {
-                        if e.kind() == std::io::ErrorKind::WouldBlock {
-                            trace!(
-                                "{} -> {}: send() would block",
-                                local_addr,
-                                send_info.to
-                            );
-                            break;
+                if conn.new_scid(&scid, reset_token, false).is_err() {
+                    break;
+                }
+
+                scid_sent = true;
+            }
+
+            if args.perform_migration
+                && !new_path_probed
+                && scid_sent
+                && conn.available_dcids() > 0
+            {
+                let additional_local_addr =
+                    migrate_socket.as_ref().unwrap().local_addr().unwrap();
+                conn.probe_path(additional_local_addr, peer_addr).unwrap();
+
+                new_path_probed = true;
+            }
+
+            // Generate outgoing QUIC packets and send them on the UDP socket, until
+            // quiche reports that there are no more packets to be sent.
+            let mut sockets = vec![&socket];
+            if let Some(migrate_socket) = migrate_socket.as_ref() {
+                sockets.push(migrate_socket);
+            }
+
+            for socket in sockets {
+                let local_addr = socket.local_addr().unwrap();
+
+                for peer_addr in conn.paths_iter(local_addr) {
+                    loop {
+                        let (write, send_info) = match conn.send_on_path(
+                            &mut out,
+                            Some(local_addr),
+                            Some(peer_addr),
+                        ) {
+                            Ok(v) => v,
+
+                            Err(quiche::Error::Done) => {
+                                trace!(
+                                    "{} -> {}: done writing",
+                                    local_addr,
+                                    peer_addr
+                                );
+                                break;
+                            },
+
+                            Err(e) => {
+                                error!(
+                                    "{} -> {}: send failed: {:?}",
+                                    local_addr, peer_addr, e
+                                );
+
+                                conn.close(false, 0x1, b"fail").ok();
+                                break;
+                            },
+                        };
+
+                        if let Err(e) =
+                            socket.send_to(&out[..write], send_info.to)
+                        {
+                            if e.kind() == std::io::ErrorKind::WouldBlock {
+                                trace!(
+                                    "{} -> {}: send() would block",
+                                    local_addr,
+                                    send_info.to
+                                );
+                                break;
+                            }
+
+                            return Err(ClientError::Other(format!(
+                                "{} -> {}: send() failed: {:?}",
+                                local_addr, send_info.to, e
+                            )));
                         }
 
-                        return Err(ClientError::Other(format!(
-                            "{} -> {}: send() failed: {:?}",
-                            local_addr, send_info.to, e
-                        )));
+                        trace!(
+                            "written {write} bytes from {local_addr} to {}",
+                            send_info.to
+                        );
                     }
-
-                    trace!(
-                        "written {write} bytes from {local_addr} to {}",
-                        send_info.to
-                    );
                 }
             }
-        }
 
-        if conn.is_closed() {
-            info!(
-                "connection closed, {:?} {:?}",
-                conn.stats(),
-                conn.path_stats().collect::<Vec<quiche::PathStats>>()
-            );
-
-            if !conn.is_established() {
-                error!(
-                    "connection timed out after {:?}",
-                    app_data_start.elapsed(),
+            if conn.is_closed() {
+                info!(
+                    "connection closed, {:?} {:?}",
+                    conn.stats(),
+                    conn.path_stats().collect::<Vec<quiche::PathStats>>()
                 );
 
-                return Err(ClientError::HandshakeFail);
-            }
+                if !conn.is_established() {
+                    error!(
+                        "connection timed out after {:?}",
+                        app_data_start.elapsed(),
+                    );
 
-            if let Some(session_file) = &args.session_file {
-                if let Some(session) = conn.session() {
-                    std::fs::write(session_file, session).ok();
+                    return Err(ClientError::HandshakeFail);
                 }
-            }
 
-            if let Some(h_conn) = http_conn {
-                if h_conn.report_incomplete(&app_data_start) {
-                    return Err(ClientError::HttpFail);
+                if let Some(session_file) = &args.session_file {
+                    if let Some(session) = conn.session() {
+                        std::fs::write(session_file, session).ok();
+                    }
                 }
-            }
 
-            break;
-        }
+                if let Some(h_conn) = http_conn {
+                    if h_conn.report_incomplete(&app_data_start) {
+                        return Err(ClientError::HttpFail);
+                    }
+                }
+
+                break;
+            }
+        
     }
 
     Ok(())

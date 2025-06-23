@@ -69,6 +69,7 @@ pkg-config = { version = "0.3", optional = true }
 cdylib-link-lines = { version = "0.1", optional = true }
 
 [dependencies]
+docopt = "1"
 boring = { workspace = true, optional = true }
 debug_panic = { version = "0.2.1" }
 either = { version = "1.8", default-features = false }
