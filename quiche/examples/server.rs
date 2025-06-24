@@ -58,7 +58,6 @@ fn main() {
     let cmd = &args.next().unwrap();
 
     if args.len() != 0 {
-        println!("{:?}",args);
         println!("Usage: {cmd}");
         println!("\nSee tools/apps/ for more complete implementations.");
         return;
@@ -130,7 +129,7 @@ fn main() {
             // has expired, so handle it without attempting to read packets. We
             // will then proceed with the send loop.
             if events.is_empty() {
-                debug!("timed out");
+                println!("timed out");
 
                 clients.values_mut().for_each(|c| c.conn.on_timeout());
 
@@ -144,7 +143,7 @@ fn main() {
                     // There are no more UDP packets to read, so end the read
                     // loop.
                     if e.kind() == std::io::ErrorKind::WouldBlock {
-                        debug!("recv() would block");
+                        println!("recv() would block");
                         break 'read;
                     }
 
@@ -196,7 +195,7 @@ fn main() {
 
                     if let Err(e) = socket.send_to(out, from) {
                         if e.kind() == std::io::ErrorKind::WouldBlock {
-                            debug!("send() would block");
+                            println!("send() would block");
                             break;
                         }
 
@@ -233,7 +232,7 @@ fn main() {
 
                     if let Err(e) = socket.send_to(out, from) {
                         if e.kind() == std::io::ErrorKind::WouldBlock {
-                            debug!("send() would block");
+                            println!("send() would block");
                             break;
                         }
 
@@ -260,7 +259,7 @@ fn main() {
                 // instead of changing it again.
                 let scid = hdr.dcid.clone();
 
-                debug!("New connection: dcid={:?} scid={:?}", hdr.dcid, scid);
+                println!("New connection: dcid={:?} scid={:?}", hdr.dcid, scid);
 
                 let conn = quiche::accept(
                     &scid,
@@ -302,7 +301,7 @@ fn main() {
                 },
             };
 
-            debug!("{} processed {} bytes", client.conn.trace_id(), read);
+            println!("{} processed {} bytes", client.conn.trace_id(), read);
 
             if client.conn.is_in_early_data() || client.conn.is_established() {
                 // Handle writable streams.
@@ -315,7 +314,7 @@ fn main() {
                     while let Ok((read, fin)) =
                         client.conn.stream_recv(s, &mut buf)
                     {
-                        debug!(
+                        println!(
                             "{} received {} bytes",
                             client.conn.trace_id(),
                             read
@@ -323,7 +322,7 @@ fn main() {
 
                         let stream_buf = &buf[..read];
 
-                        debug!(
+                        println!(
                             "{} stream {} has {} bytes (fin? {})",
                             client.conn.trace_id(),
                             s,
@@ -346,7 +345,7 @@ fn main() {
                     Ok(v) => v,
 
                     Err(quiche::Error::Done) => {
-                        debug!("{} done writing", client.conn.trace_id());
+                        println!("{} done writing", client.conn.trace_id());
                         break;
                     },
 
@@ -360,20 +359,20 @@ fn main() {
 
                 if let Err(e) = socket.send_to(&out[..write], send_info.to) {
                     if e.kind() == std::io::ErrorKind::WouldBlock {
-                        debug!("send() would block");
+                        println!("send() would block");
                         break;
                     }
 
                     panic!("send() failed: {e:?}");
                 }
 
-                debug!("{} written {} bytes", client.conn.trace_id(), write);
+                println!("{} written {} bytes", client.conn.trace_id(), write);
             }
         }
 
         // Garbage collect closed connections.
         clients.retain(|_, ref mut c| {
-            debug!("Collecting garbage");
+            println!("Collecting garbage");
 
             if c.conn.is_closed() {
                 info!(
@@ -500,7 +499,7 @@ fn handle_stream(client: &mut Client, stream_id: u64, buf: &[u8], root: &str) {
 fn handle_writable(client: &mut Client, stream_id: u64) {
     let conn = &mut client.conn;
 
-    debug!("{} stream {} is writable", conn.trace_id(), stream_id);
+    println!("{} stream {} is writable", conn.trace_id(), stream_id);
 
     if !client.partial_responses.contains_key(&stream_id) {
         return;
