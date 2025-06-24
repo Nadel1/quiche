@@ -38,13 +38,10 @@ fn main() {
     let mut out = [0; MAX_DATAGRAM_SIZE];
 
     let mut args = std::env::args();
-    let reqs_count=5;
-    let mut http_req_stream_id: u64 = 4;
 
     let cmd = &args.next().unwrap();
 
     if args.len() != 1 {
-        println!("{:?}",args);
         println!("Usage: {cmd} URL");
         println!("\nSee tools/apps/ for more complete implementations.");
         return;
@@ -126,19 +123,22 @@ fn main() {
 
     while let Err(e) = socket.send_to(&out[..write], send_info.to) {
         if e.kind() == std::io::ErrorKind::WouldBlock {
-            debug!("send() would block");
+            println!("send() would block");
             continue;
         }
 
         panic!("send() failed: {e:?}");
     }
 
+<<<<<<< HEAD
     debug!("written {write}");
+=======
+    println!("written {}", write);
+>>>>>>> 708c5501 (get tokio-quiche client)
 
     let req_start = std::time::Instant::now();
 
     let mut req_sent = false;
-    let mut num_reqs_sent = 0;
 
     loop {
         poll.poll(&mut events, conn.timeout()).unwrap();
@@ -150,7 +150,7 @@ fn main() {
             // has expired, so handle it without attempting to read packets. We
             // will then proceed with the send loop.
             if events.is_empty() {
-                debug!("timed out");
+                println!("timed out");
 
                 conn.on_timeout();
                 break 'read;
@@ -163,7 +163,7 @@ fn main() {
                     // There are no more UDP packets to read, so end the read
                     // loop.
                     if e.kind() == std::io::ErrorKind::WouldBlock {
-                        debug!("recv() would block");
+                        println!("recv() would block");
                         break 'read;
                     }
 
@@ -171,7 +171,11 @@ fn main() {
                 },
             };
 
+<<<<<<< HEAD
             debug!("got {len} bytes");
+=======
+            println!("got {} bytes", len);
+>>>>>>> 708c5501 (get tokio-quiche client)
 
             let recv_info = quiche::RecvInfo {
                 to: socket.local_addr().unwrap(),
@@ -188,77 +192,71 @@ fn main() {
                 },
             };
 
+<<<<<<< HEAD
             debug!("processed {read} bytes");
+=======
+            println!("processed {} bytes", read);
+>>>>>>> 708c5501 (get tokio-quiche client)
         }
 
-        debug!("done reading");
+        println!("done reading");
 
         if conn.is_closed() {
             info!("connection closed, {:?}", conn.stats());
             break;
         }
-        let req = format!("GET {}\r\n", url.path());    
-        // Send an HTTP request as soon as the connection is established.
-        
-            if conn.is_established() && !req_sent {
-                info!("sending HTTP request for {}", url.path());
 
-                
-                conn.stream_send(http_req_stream_id, req.as_bytes(), true)
+        // Send an HTTP request as soon as the connection is established.
+        if conn.is_established() && !req_sent {
+            info!("sending HTTP request for {}", url.path());
+
+            let req = format!("GET {}\r\n", url.path());
+            conn.stream_send(HTTP_REQ_STREAM_ID, req.as_bytes(), true)
                 .unwrap();
 
-                req_sent=true;
+            req_sent = true;
+        }
 
         // Process all readable streams.
         for s in conn.readable() {
             while let Ok((read, fin)) = conn.stream_recv(s, &mut buf) {
+<<<<<<< HEAD
                 debug!("received {read} bytes");
+=======
+                println!("received {} bytes", read);
+>>>>>>> 708c5501 (get tokio-quiche client)
 
-            // Process all readable streams.
-            for s in conn.readable() {
-                while let Ok((read, fin)) = conn.stream_recv(s, &mut buf) {
-                    debug!("received {} bytes", read);
+                let stream_buf = &buf[..read];
 
-                    let stream_buf = &buf[..read];
+                println!(
+                    "stream {} has {} bytes (fin? {})",
+                    s,
+                    stream_buf.len(),
+                    fin
+                );
 
-                    debug!(
-                        "stream {} has {} bytes (fin? {})",
-                        s,
-                        stream_buf.len(),
-                        fin
-                    );
+                print!("{}", unsafe {
+                    std::str::from_utf8_unchecked(stream_buf)
+                });
 
-                    print!("{}", unsafe {
-                        std::str::from_utf8_unchecked(stream_buf)
-                    });
-
-                    // The server reported that it has no more data to send, which
-                    // we got the full response. Close the connection.
-                    if s == http_req_stream_id && fin {
+                // The server reported that it has no more data to send, which
+                // we got the full response. Close the connection.
+                if s == HTTP_REQ_STREAM_ID && fin {
                     info!(
-                        "response received in {:?}, continuing...",
+                        "response received in {:?}, closing...",
                         req_start.elapsed()
                     );
 
-                    // Close the connection when we have done the requested number of requests
-                    if num_reqs_sent >= reqs_count {
-                        conn.close(true, 0x00, b"kthxbye").unwrap();
-                    }
-                    else {
-                        req_sent = false;
-                        http_req_stream_id += 4;
-                    }
-                }
+                    conn.close(true, 0x00, b"kthxbye").unwrap();
                 }
             }
-            if conn.is_established() && !req_sent {
-                info!("sending HTTP request for {}", url.path());
+        }
 
-                
-                conn.stream_send(HTTP_REQ_STREAM_ID, req.as_bytes(), true)
-                    .unwrap();
-                req_sent=true;
-                num_reqs_sent += 1
+        // Generate outgoing QUIC packets and send them on the UDP socket, until
+        // quiche reports that there are no more packets to be sent.
+        loop {
+            let (write, send_info) = match conn.send(&mut out) {
+                Ok(v) => v,
 
                 Err(quiche::Error::Done) => {
                     debug!("done writing");
@@ -285,40 +283,29 @@ fn main() {
             debug!("written {write}");
         }
 
-                    Err(quiche::Error::Done) => {
-                        debug!("done writing");
-                        break;
-                    },
+                    conn.close(false, 0x1, b"fail").ok();
+                    break;
+                },
+            };
 
-                    Err(e) => {
-                        error!("send failed: {:?}", e);
-
-                        conn.close(false, 0x1, b"fail").ok();
-                        break;
-                    },
-                };
-
-                if let Err(e) = socket.send_to(&out[..write], send_info.to) {
-                    if e.kind() == std::io::ErrorKind::WouldBlock {
-                        debug!("send() would block");
-                        break;
-                    }
-
-                    panic!("send() failed: {:?}", e);
+            if let Err(e) = socket.send_to(&out[..write], send_info.to) {
+                if e.kind() == std::io::ErrorKind::WouldBlock {
+                    println!("send() would block");
+                    break;
                 }
 
-                debug!("written {}", write);
+                panic!("send() failed: {:?}", e);
             }
 
-            if conn.is_closed() {
-                info!("connection closed, {:?}", conn.stats());
-                break;
-            }
+            println!("written {}", write);
+        }
 
-            req_sent=false;
+        if conn.is_closed() {
+            info!("connection closed, {:?}", conn.stats());
+            break;
         }
     }
-
+}
 
 fn hex_dump(buf: &[u8]) -> String {
     let vec: Vec<String> = buf.iter().map(|b| format!("{b:02x}")).collect();
