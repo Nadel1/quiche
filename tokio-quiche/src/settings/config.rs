@@ -75,7 +75,7 @@ impl Config {
                     .inspect_err(|e| log::warn!("failed to open SSLKEYLOGFILE"; "error" => e))
                     .ok()
             } else {
-                log::warn!("SSLKEYLOGFILE is set, but `--cfg capture_keylogs` was not enabled. No keys will be logged.");
+                println!("SSLKEYLOGFILE is set, but `--cfg capture_keylogs` was not enabled. No keys will be logged.");
                 None
             });
 

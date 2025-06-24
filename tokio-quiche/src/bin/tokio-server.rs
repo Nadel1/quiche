@@ -13,15 +13,15 @@ use tokio_quiche::{ConnectionParams, ServerH3Controller, ServerH3Driver};
 
 use quiche::h3::Priority;
 #[tokio::main]
-async fn main(){
-    let socket = tokio::net::UdpSocket::bind("0.0.0.0:4043").await?;
+async fn main() -> tokio_quiche::QuicResult<()> {
+    let socket = tokio::net::UdpSocket::bind("127.0.0.1:4433").await?;
     let mut listeners = listen(
         [socket],
         ConnectionParams::new_server(
             Default::default(),
             tokio_quiche::settings::TlsCertificatePaths {
-                cert: "/path/to/cert.pem",
-                private_key: "/path/to/key.pem",
+                cert: "cert.pem",
+                private_key: "key.pem",
                 kind: tokio_quiche::settings::CertificateKind::X509,
             },
             Default::default(),
@@ -36,6 +36,7 @@ async fn main(){
         conn?.start(driver);
         tokio::spawn(handle_connection(controller));
     }
+    Ok(())
     
 }
 async fn handle_connection(mut controller: ServerH3Controller) {
@@ -51,14 +52,14 @@ async fn handle_connection(mut controller: ServerH3Controller) {
                 log::info!("incomming headers"; "headers" => ?headers);
                 send.send(OutboundFrame::Headers(vec![h3::Header::new(
                     b":status", b"200", 
-                )],Some(Priority::new(3, 1))))
+                )],Some(Priority::new(0, false))))
                 .await
                 .unwrap();
 
                 send.send(OutboundFrame::body(
                     BufFactory::buf_from_slice(b"hello from TQ!"),
                     true,
-                ),None)
+                ))
                 .await
                 .unwrap();
             },
