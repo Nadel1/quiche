@@ -11,9 +11,10 @@ use tokio_quiche::metrics::DefaultMetrics;
 use tokio_quiche::quic::SimpleConnectionIdGenerator;
 use tokio_quiche::quiche::h3;
 use tokio_quiche::{ConnectionParams, ServerH3Controller, ServerH3Driver};
-
+use tokio_quiche::settings::QuicSettings;
 use tokio_quiche::args::*;
 use std::str::from_utf8;
+use std::time::Duration;
 use quiche::h3::Priority;
 
 
@@ -59,10 +60,13 @@ async fn main() -> tokio_quiche::QuicResult<()> {
 
     let bind_to:String=args.listen.parse().unwrap();
     let socket = tokio::net::UdpSocket::bind(bind_to).await?;
+    let mut settings=QuicSettings::default();
+    settings.max_idle_timeout=Some(Duration::from_millis(conn_args.idle_timeout));
+    settings.initial_rtt=Some(conn_args.initial_rtt);
     let mut listeners = listen(
         [socket],
         ConnectionParams::new_server(
-            Default::default(),
+            settings,
             tokio_quiche::settings::TlsCertificatePaths {
                 cert: &args.cert,
                 private_key: &args.key,

@@ -163,12 +163,14 @@ where
     S: TryInto<Socket<Tx, Rx>>,
     S::Error: std::error::Error + Send + Sync + 'static,
 {
+    println!("-----in connect-----");
     // Don't apply_max_capabilities(): some NICs don't support GSO
     let socket: Socket<Tx, Rx> = socket.try_into()?;
 
     let (h3_driver, h3_controller) =
         ClientH3Driver::new(Http3Settings::default());
     let mut params = ConnectionParams::default();
+    params.settings.initial_rtt = Some(Duration::from_secs(30));
     params.settings.max_idle_timeout = Some(Duration::from_secs(30));
 
     Ok((
@@ -210,6 +212,7 @@ where
     )?;
 
     #[cfg(not(feature = "zero-copy"))]
+    println!("Set initial rtt is: {:?}",params.settings.initial_rtt);
     let mut quiche_conn = quiche::connect(
         host,
         &scid,
