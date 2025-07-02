@@ -1,9 +1,15 @@
+use std::time::Duration;
+
 use foundations::telemetry::log;
 use tokio_quiche::args::*;
 use tokio_quiche::http3::driver::{
     ClientH3Event, H3Event, InboundFrame, IncomingH3Headers,
 };
+use tokio_quiche::http3::settings::Http3Settings;
 use tokio_quiche::quiche::h3;
+use tokio_quiche::socket::Socket;
+use tokio_quiche::ClientH3Driver;
+use tokio_quiche::ConnectionParams;
 
 const MAX_DATAGRAM_SIZE: usize = 1350;
 
@@ -17,6 +23,8 @@ async fn main() -> tokio_quiche::QuicResult<()> {
 
     config.set_application_protos(&conn_args.alpns).unwrap();
 
+    println!("Set initial rtt: {:?}", conn_args.initial_rtt);
+    println!("Set max idle timeout: {:?}", conn_args.idle_timeout);
     config.set_initial_rtt(conn_args.initial_rtt);
     config.set_max_idle_timeout(conn_args.idle_timeout);
     config.set_max_recv_udp_payload_size(MAX_DATAGRAM_SIZE);
@@ -58,12 +66,24 @@ async fn main() -> tokio_quiche::QuicResult<()> {
     println!("Args method: {}", &args.method);
     println!("Args method: {:?}", &args.dump_response_path);
     socket.connect(peer_addr).await?;
+    let mut params = ConnectionParams::default();
+    //params.settings.initial_rtt = Some(conn_args.initial_rtt);
+    //params.settings.max_idle_timeout =
+    //    Some(Duration::from_millis(conn_args.idle_timeout));
+    //params.settings.initial_rtt = Some(Duration::from_secs(300));
+    //params.settings.max_idle_timeout = Some(Duration::from_secs(30));
+    //let (h3_driver, mut controller) =
+    //    ClientH3Driver::new(Http3Settings::default());
+    //let socket = socket.try_into()?;
+
     let (_, mut controller) = tokio_quiche::quic::connect(socket, None).await?;
     println!("Path is: {:?}", file);
-
+    //tokio_quiche::quic::connect_with_config(socket, None, &params, h3_driver)
+    //    .await?;
     println!("Connected");
+    println!("Requests: {:?}", args.reqs_cardinal);
 
-    for _i in 1..6 {
+    for _i in 0..args.reqs_cardinal {
         controller
             .request_sender()
             .send(tokio_quiche::http3::driver::NewClientRequest {

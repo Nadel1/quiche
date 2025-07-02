@@ -294,6 +294,10 @@ pub struct QuicSettings {
     ///
     /// [`enable_track_unknown_transport_parameters()`]: https://docs.rs/quiche/latest/quiche/struct.Config.html#method.enable_track_unknown_transport_parameters
     pub track_unknown_transport_parameters: Option<usize>,
+
+    /// Make initial rtt configurable
+    #[serde(default = "QuicSettings::default_initial_rtt")]
+    pub initial_rtt: Option<Duration>,
 }
 
 impl QuicSettings {
@@ -412,6 +416,11 @@ impl QuicSettings {
     #[inline]
     fn default_max_path_challenge_recv_queue_len() -> usize {
         3
+    }
+
+    #[inline]
+    fn default_initial_rtt() -> Option<Duration> {
+        Some(Duration::from_secs(30))
     }
 }
 
