@@ -9,20 +9,25 @@ use tokio_quiche::http3::settings::Http3Settings;
 use tokio_quiche::quiche::h3;
 use tokio_quiche::socket::Socket;
 use tokio_quiche::ClientH3Driver;
+use tokio_quiche::settings::QuicSettings;
 use tokio_quiche::ConnectionParams;
 
 const MAX_DATAGRAM_SIZE: usize = 1350;
 
 #[tokio::main]
 async fn main() -> tokio_quiche::QuicResult<()> {
+    println!("---beginning of client---");
     let docopt = docopt::Docopt::new(CLIENT_USAGE).unwrap();
+    println!("new docopt");
     let conn_args = CommonArgs::with_docopt(&docopt);
+    println!("new conn args");
     let args = ClientArgs::with_docopt(&docopt);
+    println!("new args");
     // Create the configuration for the QUIC connection.
     let mut config = quiche::Config::new(args.version).unwrap();
-
+    println!("new config");
     config.set_application_protos(&conn_args.alpns).unwrap();
-
+    println!("new application protos");
     println!("Set initial rtt: {:?}", conn_args.initial_rtt);
     println!("Set max idle timeout: {:?}", conn_args.idle_timeout);
     config.set_initial_rtt(conn_args.initial_rtt);
@@ -66,20 +71,26 @@ async fn main() -> tokio_quiche::QuicResult<()> {
     println!("Args method: {}", &args.method);
     println!("Args method: {:?}", &args.dump_response_path);
     socket.connect(peer_addr).await?;
-    let mut params = ConnectionParams::default();
-    //params.settings.initial_rtt = Some(conn_args.initial_rtt);
-    //params.settings.max_idle_timeout =
-    //    Some(Duration::from_millis(conn_args.idle_timeout));
-    //params.settings.initial_rtt = Some(Duration::from_secs(300));
-    //params.settings.max_idle_timeout = Some(Duration::from_secs(30));
-    //let (h3_driver, mut controller) =
-    //    ClientH3Driver::new(Http3Settings::default());
-    //let socket = socket.try_into()?;
+    //let mut params = ConnectionParams::default();
+    let mut settings=QuicSettings::default();
+    settings.max_idle_timeout=Some(Duration::from_millis(10000));
+    settings.initial_rtt=Some(Duration::from_millis(10000));
+    let mut params = ConnectionParams::new_client(
+        settings,
+        None,
+        Default::default(),
+    );
+    params.settings.initial_rtt = Some(conn_args.initial_rtt);
+    params.settings.max_idle_timeout =
+        Some(Duration::from_millis(conn_args.idle_timeout));
+    let (h3_driver, mut controller) =
+        ClientH3Driver::new(Http3Settings::default());
+    let socket = socket.try_into()?;
 
-    let (_, mut controller) = tokio_quiche::quic::connect(socket, None).await?;
+    //let (_, mut controller) = tokio_quiche::quic::connect(socket, None).await?;
     println!("Path is: {:?}", file);
-    //tokio_quiche::quic::connect_with_config(socket, None, &params, h3_driver)
-    //    .await?;
+    tokio_quiche::quic::connect_with_config(socket, None, &params, h3_driver)
+        .await?;
     println!("Connected");
     println!("Requests: {:?}", args.reqs_cardinal);
 
