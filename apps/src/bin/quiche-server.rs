@@ -205,7 +205,7 @@ fn main() {
             // has expired, so handle it without attempting to read packets. We
             // will then proceed with the send loop.
             if events.is_empty() && !continue_write {
-                println!("timed out");
+                trace!("timed out");
 
                 clients.values_mut().for_each(|c| c.conn.on_timeout());
 
@@ -219,7 +219,7 @@ fn main() {
                     // There are no more UDP packets to read, so end the read
                     // loop.
                     if e.kind() == std::io::ErrorKind::WouldBlock {
-                        println!("recv() would block");
+                        trace!("recv() would block");
                         break 'read;
                     }
 
@@ -227,7 +227,7 @@ fn main() {
                 },
             };
 
-            println!("got {len} bytes from {from} to {local_addr}");
+            trace!("got {len} bytes from {from} to {local_addr}");
 
             let pkt_buf = &mut buf[..len];
 
@@ -287,7 +287,7 @@ fn main() {
 
                     if let Err(e) = socket.send_to(out, from) {
                         if e.kind() == std::io::ErrorKind::WouldBlock {
-                            println!("send() would block");
+                            trace!("send() would block");
                             break;
                         }
 
@@ -326,7 +326,7 @@ fn main() {
 
                         if let Err(e) = socket.send_to(out, from) {
                             if e.kind() == std::io::ErrorKind::WouldBlock {
-                                println!("send() would block");
+                                trace!("send() would block");
                                 break;
                             }
 
@@ -434,7 +434,7 @@ fn main() {
                 },
             };
 
-            println!("{} processed {} bytes", client.conn.trace_id(), read);
+            trace!("{} processed {} bytes", client.conn.trace_id(), read);
 
             // Create a new application protocol session as soon as the QUIC
             // connection is established.
@@ -478,7 +478,7 @@ fn main() {
                         Ok(v) => Some(v),
 
                         Err(e) => {
-                            println!("{} {}", client.conn.trace_id(), e);
+                            trace!("{} {}", client.conn.trace_id(), e);
                             None
                         },
                     };
@@ -567,7 +567,7 @@ fn main() {
                     Ok(v) => v,
 
                     Err(quiche::Error::Done) => {
-                        println!("{} done writing", client.conn.trace_id());
+                        trace!("{} done writing", client.conn.trace_id());
                         break;
                     },
 
@@ -603,20 +603,20 @@ fn main() {
                 enable_gso,
             ) {
                 if e.kind() == std::io::ErrorKind::WouldBlock {
-                    println!("send() would block");
+                    trace!("send() would block");
                     break;
                 }
 
                 panic!("send_to() failed: {e:?}");
             }
 
-            println!(
+            trace!(
                 "{} written {total_write} bytes with {dst_info:?}",
                 client.conn.trace_id()
             );
 
             if total_write >= max_send_burst {
-                println!("{} pause writing", client.conn.trace_id(),);
+                trace!("{} pause writing", client.conn.trace_id(),);
                 continue_write = true;
                 break;
             }
@@ -624,7 +624,7 @@ fn main() {
 
         // Garbage collect closed connections.
         clients.retain(|_, ref mut c| {
-            println!("Collecting garbage");
+            trace!("Collecting garbage");
 
             if c.conn.is_closed() {
                 info!(

@@ -25,7 +25,7 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 //! Configuration for the h3i client.
-use std::io;
+use std::{io, time::Duration};
 
 /// Server details and QUIC connection properties.
 #[derive(Clone)]
@@ -61,6 +61,8 @@ pub struct Config {
     pub max_window: u64,
     /// Receiver window limit for a stream in bytes.
     pub max_stream_window: u64,
+    /// initial rtt
+    pub initial_rtt:Duration
 }
 
 impl Config {
@@ -166,6 +168,7 @@ impl Config {
             max_streams_uni: self.max_streams_uni,
             max_window: self.max_window,
             max_stream_window: self.max_stream_window,
+            initial_rtt: self.initial_rtt,
         })
     }
 }
@@ -173,6 +176,7 @@ impl Config {
 impl Default for Config {
     fn default() -> Self {
         // Values mirror config_from_clap()
+        println!("in h3i/src/config.rs in the default of config");
         Self {
             host_port: "".to_string(),
             omit_sni: false,
@@ -188,6 +192,7 @@ impl Default for Config {
             max_streams_uni: 100,
             max_window: 25165824,
             max_stream_window: 16777216,
+            initial_rtt: Duration::from_secs(300),
         }
     }
 }
