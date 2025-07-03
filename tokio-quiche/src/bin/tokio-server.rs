@@ -17,52 +17,19 @@ use std::str::from_utf8;
 use std::time::Duration;
 use quiche::h3::Priority;
 
-
-const MAX_DATAGRAM_SIZE: usize = 1350;
-
 #[tokio::main]
 async fn main() -> tokio_quiche::QuicResult<()> {
     // Parse CLI parameters.
     let docopt = docopt::Docopt::new(SERVER_USAGE).unwrap();
     let conn_args = CommonArgs::with_docopt(&docopt);
     let args = ServerArgs::with_docopt(&docopt);
-    let pacing = false;
-
-    // Create the configuration for the QUIC connections.
-    let mut config = quiche::Config::new(quiche::PROTOCOL_VERSION).unwrap();
-
-    config.load_cert_chain_from_pem_file(&args.cert).unwrap();
-    config.load_priv_key_from_pem_file(&args.key).unwrap();
-
-    config.set_application_protos(&conn_args.alpns).unwrap();
-
-    config.discover_pmtu(args.enable_pmtud);
-    config.set_initial_rtt(conn_args.initial_rtt);
-    config.set_max_idle_timeout(conn_args.idle_timeout);
-    config.set_max_recv_udp_payload_size(MAX_DATAGRAM_SIZE);
-    config.set_max_send_udp_payload_size(MAX_DATAGRAM_SIZE);
-    config.set_initial_max_data(conn_args.max_data);
-    config.set_initial_max_stream_data_bidi_local(conn_args.max_stream_data);
-    config.set_initial_max_stream_data_bidi_remote(conn_args.max_stream_data);
-    config.set_initial_max_stream_data_uni(conn_args.max_stream_data);
-    config.set_initial_max_streams_bidi(conn_args.max_streams_bidi);
-    config.set_initial_max_streams_uni(conn_args.max_streams_uni);
-    config.set_disable_active_migration(!conn_args.enable_active_migration);
-    config.set_active_connection_id_limit(conn_args.max_active_cids);
-    config.set_initial_congestion_window_packets(
-        usize::try_from(conn_args.initial_cwnd_packets).unwrap(),
-    );
-
-    config.set_max_connection_window(conn_args.max_window);
-    config.set_max_stream_window(conn_args.max_stream_window);
-
-    config.enable_pacing(pacing);
 
     let bind_to:String=args.listen.parse().unwrap();
     let socket = tokio::net::UdpSocket::bind(bind_to).await?;
     let mut settings=QuicSettings::default();
     settings.max_idle_timeout=Some(Duration::from_millis(conn_args.idle_timeout));
     settings.initial_rtt=Some(conn_args.initial_rtt);
+    settings.disable_client_ip_validation=args.no_retry;
     let mut listeners = listen(
         [socket],
         ConnectionParams::new_server(

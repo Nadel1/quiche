@@ -336,7 +336,6 @@ impl QuicSettings {
 
     #[inline]
     fn default_max_idle_timeout() -> Option<Duration> {
-        println!("setting default max idle timeout in tokio-quiche/src/settings/quic.rs");
         Some(Duration::from_secs(56))
     }
 
@@ -421,7 +420,6 @@ impl QuicSettings {
 
     #[inline]
     fn default_initial_rtt() -> Option<Duration> {
-        println!("setting default initial rtt in tokio-quiche/src/settings/quic.rs");
         Some(Duration::from_secs(30))
     }
 }
