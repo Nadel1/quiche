@@ -172,7 +172,6 @@ where
     let mut params = ConnectionParams::default();
     params.settings.initial_rtt = Some(Duration::from_secs(30));
     params.settings.max_idle_timeout = Some(Duration::from_secs(30));
-
     Ok((
         connect_with_config(socket, host, &params, h3_driver).await?,
         h3_controller,
@@ -192,7 +191,7 @@ where
 /// both connections try to read from the shared socket.
 pub async fn connect_with_config<Tx, Rx, App>(
     socket: Socket<Tx, Rx>, host: Option<&str>, params: &ConnectionParams<'_>,
-    app: App,
+    app: App
 ) -> QuicResult<QuicConnection>
 where
     Tx: DatagramSocketSend + Send + 'static,
