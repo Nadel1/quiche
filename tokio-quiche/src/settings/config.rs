@@ -66,6 +66,7 @@ impl Config {
         params: &ConnectionParams, socket_capabilities: SocketCapabilities,
     ) -> QuicResult<Self> {
         let quic_settings = &params.settings;
+        println!("init rtt in config.rs is {:?}",quic_settings.initial_rtt);
         let keylog_path = match &quic_settings.keylog_file {
             Some(f) => Some(Cow::Borrowed(f.as_ref())),
             None => std::env::var_os("SSLKEYLOGFILE").map(Cow::from),
@@ -193,6 +194,8 @@ fn make_quiche_config(
     );
     config.set_stateless_reset_token(quic_settings.stateless_reset_token);
     config.set_disable_dcid_reuse(quic_settings.disable_dcid_reuse);
+
+    config.set_initial_rtt(quic_settings.initial_rtt.unwrap());
 
     if let Some(track_unknown_transport_params) =
         quic_settings.track_unknown_transport_parameters
