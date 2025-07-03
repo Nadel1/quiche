@@ -8915,7 +8915,6 @@ pub struct TransportParams {
 
 impl Default for TransportParams {
     fn default() -> TransportParams {
-        println!("--------in default params!-----------");
         TransportParams {
             original_destination_connection_id: None,
             initial_rtt: DEFAULT_INITIAL_RTT,

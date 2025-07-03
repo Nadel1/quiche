@@ -211,7 +211,6 @@ where
     )?;
 
     #[cfg(not(feature = "zero-copy"))]
-    println!("Set initial rtt is: {:?}",params.settings.initial_rtt);
     let mut quiche_conn = quiche::connect(
         host,
         &scid,
