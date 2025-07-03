@@ -28,10 +28,8 @@ use std::env;
 use std::io::BufReader;
 use std::result::Result;
 use std::time;
-use std::time::Duration;
 use std::time::Instant;
 
-use env_logger::init;
 use h3i::actions::h3::Action;
 use h3i::client::connection_summary::ConnectionSummary;
 use h3i::client::ClientError;
@@ -293,7 +291,6 @@ fn config_from_clap() -> std::result::Result<Config, String> {
         max_streams_uni,
         max_window,
         max_stream_window,
-        initial_rtt,
     };
 
     Ok(Config {
