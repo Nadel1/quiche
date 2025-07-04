@@ -56,6 +56,7 @@ async fn main() -> tokio_quiche::QuicResult<()> {
     params.settings.max_idle_timeout =
         Some(Duration::from_millis(conn_args.idle_timeout));
     params.settings.cc_algorithm=conn_args.cc_algorithm;
+    params.settings.max_ack_delay=conn_args.max_ack_delay;
     let (h3_driver, mut controller) =
         ClientH3Driver::new(Http3Settings::default());
     let socket = socket.try_into()?;

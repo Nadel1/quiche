@@ -62,6 +62,7 @@ pub struct CommonArgs {
     pub qpack_blocked_streams: Option<u64>,
     pub initial_rtt: Duration,
     pub initial_cwnd_packets: u64,
+    pub max_ack_delay: u64,
 }
 
 /// Creates a new `CommonArgs` structure using the provided [`Docopt`].
@@ -99,8 +100,9 @@ impl Args for CommonArgs {
         let (alpns, dgrams_enabled) = match (http_version, dgram_proto) {
             ("HTTP/0.9", "none") => (alpns::HTTP_09.to_vec(), false),
 
-            ("HTTP/0.9", _) =>
-                panic!("Unsupported HTTP version and DATAGRAM protocol."),
+            ("HTTP/0.9", _) => {
+                panic!("Unsupported HTTP version and DATAGRAM protocol.")
+            },
 
             ("HTTP/3", "none") => (alpns::HTTP_3.to_vec(), false),
 
@@ -194,13 +196,20 @@ impl Args for CommonArgs {
                 None
             };
 
-        let initial_rtt_millis = args.get_str("--initial-rtt").parse::<u64>().unwrap();
+        let initial_rtt_millis =
+            args.get_str("--initial-rtt").parse::<u64>().unwrap();
+
+        println!("{:?}", initial_rtt_millis);
         let initial_rtt = Duration::from_millis(initial_rtt_millis);
 
         let initial_cwnd_packets = args
             .get_str("--initial-cwnd-packets")
             .parse::<u64>()
             .unwrap();
+
+        let max_ack_delay = args.get_str("--max-ack-delay");
+        println!("max ack delay is: {:?}", max_ack_delay);
+        let max_ack_delay = max_ack_delay.parse::<u64>().unwrap();
 
         CommonArgs {
             alpns,
@@ -226,6 +235,7 @@ impl Args for CommonArgs {
             qpack_blocked_streams,
             initial_rtt,
             initial_cwnd_packets,
+            max_ack_delay,
         }
     }
 }
@@ -256,6 +266,7 @@ impl Default for CommonArgs {
             qpack_blocked_streams: None,
             initial_rtt: Duration::from_millis(333),
             initial_cwnd_packets: 10,
+            max_ack_delay: 10,
         }
     }
 }
@@ -303,6 +314,7 @@ Options:
   --source-port PORT       Source port to use when connecting to the server [default: 0].
   --initial-rtt MILLIS     The initial RTT in milliseconds [default: 333].
   --initial-cwnd-packets PACKETS   The initial congestion window size in terms of packet count [default: 10].
+  --max-ack-delay MILLIS   Max ack delay
   -h --help                Show this screen.
 ";
 
@@ -479,6 +491,7 @@ Options:
   --disable-pacing            Disable pacing (linux only).
   --initial-rtt MILLIS     The initial RTT in milliseconds [default: 333].
   --initial-cwnd-packets PACKETS      The initial congestion window size in terms of packet count [default: 10].
+  --max-ack-delay MILLIS      Max ack delay
   -h --help                   Show this screen.
 ";
 
