@@ -444,7 +444,7 @@ pub const MAX_CONN_ID_LEN: usize = packet::MAX_CID_LEN as usize;
 pub const MIN_CLIENT_INITIAL_LEN: usize = 1200;
 
 /// The default initial RTT.
-const DEFAULT_INITIAL_RTT: Duration = Duration::from_millis(333);
+const DEFAULT_INITIAL_RTT: Duration = Duration::from_millis(420);
 
 #[cfg(not(feature = "fuzzing"))]
 const PAYLOAD_MIN_LEN: usize = 4;
