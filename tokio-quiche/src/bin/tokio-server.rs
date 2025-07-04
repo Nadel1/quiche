@@ -30,6 +30,7 @@ async fn main() -> tokio_quiche::QuicResult<()> {
     settings.max_idle_timeout=Some(Duration::from_millis(conn_args.idle_timeout));
     settings.initial_rtt=Some(conn_args.initial_rtt);
     settings.disable_client_ip_validation=args.no_retry;
+    settings.cc_algorithm=conn_args.cc_algorithm;
     let mut listeners = listen(
         [socket],
         ConnectionParams::new_server(
