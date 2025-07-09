@@ -1,6 +1,9 @@
 use foundations::telemetry::log;
 use futures::{SinkExt as _, StreamExt as _};
 use quiche::h3::NameValue;
+use std::str::from_utf8;
+use std::time::Duration;
+use tokio_quiche::args::*;
 use tokio_quiche::buf_factory::BufFactory;
 use tokio_quiche::http3::driver::{
     H3Event, IncomingH3Headers, OutboundFrame, ServerH3Event,
@@ -10,12 +13,11 @@ use tokio_quiche::listen;
 use tokio_quiche::metrics::DefaultMetrics;
 use tokio_quiche::quic::SimpleConnectionIdGenerator;
 use tokio_quiche::quiche::h3;
-use tokio_quiche::{ConnectionParams, ServerH3Controller, ServerH3Driver};
 use tokio_quiche::settings::QuicSettings;
-use tokio_quiche::args::*;
-use std::str::from_utf8;
-use std::time::Duration;
+use tokio_quiche::{ConnectionParams, ServerH3Controller, ServerH3Driver};
+
 use quiche::h3::Priority;
+
 
 #[tokio::main]
 async fn main() -> tokio_quiche::QuicResult<()> {
@@ -24,14 +26,15 @@ async fn main() -> tokio_quiche::QuicResult<()> {
     let conn_args = CommonArgs::with_docopt(&docopt);
     let args = ServerArgs::with_docopt(&docopt);
 
-    let bind_to:String=args.listen.parse().unwrap();
+    let bind_to: String = args.listen.parse().unwrap();
     let socket = tokio::net::UdpSocket::bind(bind_to).await?;
-    let mut settings=QuicSettings::default();
-    settings.max_idle_timeout=Some(Duration::from_millis(conn_args.idle_timeout));
-    settings.initial_rtt=Some(conn_args.initial_rtt);
-    settings.disable_client_ip_validation=args.no_retry;
-    settings.cc_algorithm=conn_args.cc_algorithm;
-    settings.max_ack_delay=conn_args.max_ack_delay;
+    let mut settings = QuicSettings::default();
+    settings.max_idle_timeout =
+        Some(Duration::from_millis(conn_args.idle_timeout));
+    settings.initial_rtt = Some(conn_args.initial_rtt);
+    settings.disable_client_ip_validation = args.no_retry;
+    settings.cc_algorithm = conn_args.cc_algorithm;
+    settings.max_ack_delay = conn_args.max_ack_delay;
     let mut listeners = listen(
         [socket],
         ConnectionParams::new_server(
@@ -56,6 +59,7 @@ async fn main() -> tokio_quiche::QuicResult<()> {
     Ok(())
 }
 async fn handle_connection(mut controller: ServerH3Controller) {
+    
     while let Some(ServerH3Event::Core(event)) =
         controller.event_receiver_mut().recv().await
     {
@@ -78,9 +82,8 @@ async fn handle_connection(mut controller: ServerH3Controller) {
                 for hdr in request {
                     match hdr.name() {
                         b":path" => {
-                            
                             let path = Some(from_utf8(hdr.value()).unwrap());
-                            println!("Path is: {:?}",path);
+                            println!("Path is: {:?}", path);
                             let body = std::fs::read(path.unwrap())
                                 .unwrap_or_else(|_| b"Not Found!\r\n".to_vec());
                             send.send(OutboundFrame::body(
@@ -110,7 +113,6 @@ async fn handle_connection(mut controller: ServerH3Controller) {
                         },
                     }
                 }
-
             },
             event => {
                 log::info!("event: {event:?}");

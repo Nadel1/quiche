@@ -1,15 +1,18 @@
 use std::time::Duration;
 
+use datagram_socket::ShutdownConnectionExt;
 use foundations::telemetry::log;
 use tokio_quiche::args::*;
 use tokio_quiche::http3::driver::{
     ClientH3Event, H3Event, InboundFrame, IncomingH3Headers,
 };
 use tokio_quiche::http3::settings::Http3Settings;
+use tokio_quiche::quic::ConnectionShutdownBehaviour;
 use tokio_quiche::quiche::h3;
 use tokio_quiche::ClientH3Driver;
 use tokio_quiche::settings::QuicSettings;
 use tokio_quiche::ConnectionParams;
+
 
 
 #[tokio::main]
@@ -62,7 +65,7 @@ async fn main() -> tokio_quiche::QuicResult<()> {
     let socket = socket.try_into()?;
 
     println!("Path is: {:?}", file);
-    tokio_quiche::quic::connect_with_config(socket, None,&params, h3_driver)
+    let mut quic_connection=tokio_quiche::quic::connect_with_config(socket, None,&params, h3_driver)
         .await?;
 
 
@@ -132,5 +135,20 @@ async fn main() -> tokio_quiche::QuicResult<()> {
             }
         }
     }
+    quic_connection.shutdown_connection().await?;
+    let send_application_close=true;
+    let error_code=0;
+    let reason=Vec::new();
+    let behaviour=ConnectionShutdownBehaviour {
+        send_application_close,
+        error_code,
+        reason,
+    };
+
+    let _=controller
+        .cmd_sender()
+        .send(tokio_quiche::quic::QuicCommand::ConnectionClose(behaviour));
+    println!("connection close client!");
+    
     Ok(())
 }
