@@ -61,8 +61,7 @@ pub struct CommonArgs {
     pub qpack_max_table_capacity: Option<u64>,
     pub qpack_blocked_streams: Option<u64>,
     pub initial_rtt: Duration,
-    pub initial_cwnd_packets: u64,
-    pub max_ack_delay: u64,
+    pub initial_cwnd_packets: u64
 }
 
 /// Creates a new `CommonArgs` structure using the provided [`Docopt`].
@@ -207,10 +206,6 @@ impl Args for CommonArgs {
             .parse::<u64>()
             .unwrap();
 
-        let max_ack_delay = args.get_str("--max-ack-delay");
-        println!("max ack delay is: {:?}", max_ack_delay);
-        let max_ack_delay = max_ack_delay.parse::<u64>().unwrap();
-
         CommonArgs {
             alpns,
             max_data,
@@ -234,8 +229,7 @@ impl Args for CommonArgs {
             qpack_max_table_capacity,
             qpack_blocked_streams,
             initial_rtt,
-            initial_cwnd_packets,
-            max_ack_delay,
+            initial_cwnd_packets
         }
     }
 }
@@ -265,8 +259,7 @@ impl Default for CommonArgs {
             qpack_max_table_capacity: None,
             qpack_blocked_streams: None,
             initial_rtt: Duration::from_millis(333),
-            initial_cwnd_packets: 10,
-            max_ack_delay: 10,
+            initial_cwnd_packets: 10
         }
     }
 }
