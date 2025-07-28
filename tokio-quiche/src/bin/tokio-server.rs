@@ -18,7 +18,6 @@ use tokio_quiche::{ConnectionParams, ServerH3Controller, ServerH3Driver};
 
 use quiche::h3::Priority;
 
-
 #[tokio::main]
 async fn main() -> tokio_quiche::QuicResult<()> {
     // Parse CLI parameters.
@@ -34,7 +33,7 @@ async fn main() -> tokio_quiche::QuicResult<()> {
     settings.initial_rtt = Some(conn_args.initial_rtt);
     settings.disable_client_ip_validation = args.no_retry;
     settings.cc_algorithm = conn_args.cc_algorithm;
-    settings.max_ack_delay = conn_args.max_ack_delay;
+    settings.initial_congestion_window_packets = conn_args.initial_cwnd_packets.try_into().unwrap();
     let mut listeners = listen(
         [socket],
         ConnectionParams::new_server(
@@ -59,7 +58,6 @@ async fn main() -> tokio_quiche::QuicResult<()> {
     Ok(())
 }
 async fn handle_connection(mut controller: ServerH3Controller) {
-    
     while let Some(ServerH3Event::Core(event)) =
         controller.event_receiver_mut().recv().await
     {
