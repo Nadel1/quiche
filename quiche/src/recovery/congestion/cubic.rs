@@ -39,6 +39,7 @@ use std::time::Instant;
 use super::rtt::RttStats;
 use super::Acked;
 use super::Sent;
+use crate::recovery::congestion::own_resume::CrState;
 
 use super::reno;
 use super::Congestion;
@@ -135,8 +136,8 @@ impl State {
     fn w_cubic(&self, t: Duration, max_datagram_size: usize) -> f64 {
         let w_max = self.w_max / max_datagram_size as f64;
 
-        (C * (t.as_secs_f64() - self.k).powi(3) + w_max) *
-            max_datagram_size as f64
+        (C * (t.as_secs_f64() - self.k).powi(3) + w_max)
+            * max_datagram_size as f64
     }
 
     // W_est = W_est + alpha_aimd * (segments_acked / cwnd)  (Eq. 4)
@@ -215,9 +216,9 @@ fn on_packet_acked(
     if r.congestion_recovery_start_time.is_some() {
         let new_lost = r.lost_count - r.cubic_state.prior.lost_count;
 
-        let rollback_threshold = (r.congestion_window / r.max_datagram_size) *
-            ROLLBACK_THRESHOLD_PERCENT /
-            100;
+        let rollback_threshold = (r.congestion_window / r.max_datagram_size)
+            * ROLLBACK_THRESHOLD_PERCENT
+            / 100;
 
         let rollback_threshold = rollback_threshold.max(MIN_ROLLBACK_THRESHOLD);
 
@@ -239,7 +240,20 @@ fn on_packet_acked(
                 r.congestion_window +=
                     r.hystart.css_cwnd_inc(r.max_datagram_size);
             } else {
-                r.congestion_window += r.max_datagram_size;
+                if r.resume.enabled() {
+                    println!("------------Careful resume is enabled!!!------------");
+                    let cr_state = r.resume.get_state();
+                    match cr_state {
+                        CrState::Unvalidated(_) => {},
+                        CrState::SafeRetreat(_) => {},
+                        _ => {
+                            r.congestion_window += r.max_datagram_size;
+                        },
+                    }
+                } else {
+                    println!("------------Careful resume is not enabled!!!------------");
+                    r.congestion_window += r.max_datagram_size;
+                }
             }
 
             r.bytes_acked_sl -= r.max_datagram_size;
@@ -619,8 +633,8 @@ mod tests {
         assert!(sender.hystart.css_start_time().is_none());
         assert_eq!(
             sender.congestion_window(),
-            cwnd_prev +
-                size / hystart::CSS_GROWTH_DIVISOR * hystart::N_RTT_SAMPLE
+            cwnd_prev
+                + size / hystart::CSS_GROWTH_DIVISOR * hystart::N_RTT_SAMPLE
         );
     }
 

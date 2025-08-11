@@ -130,10 +130,14 @@ pub struct Congestion {
     max_datagram_size: usize,
 
     pub(crate) lost_count: usize,
+
+    //Careful resume
+    pub(crate) resume: own_resume::OwnResume,
+    pub(crate) cr_metrics: own_resume::CRMetrics,
 }
 
 impl Congestion {
-    pub(crate) fn from_config(recovery_config: &RecoveryConfig) -> Self {
+    pub(crate) fn from_config(recovery_config: &RecoveryConfig,trace_id: &str) -> Self {
         let initial_congestion_window = recovery_config.max_send_udp_payload_size *
             recovery_config.initial_congestion_window_packets;
 
@@ -182,6 +186,9 @@ impl Congestion {
             bbr_state: bbr::State::new(),
 
             bbr2_state: bbr2::State::new(),
+
+            resume: own_resume::OwnResume::new(trace_id),
+            cr_metrics: own_resume::CRMetrics::new(trace_id, initial_congestion_window),
         };
 
         (cc.cc_ops.on_init)(&mut cc);
@@ -416,6 +423,7 @@ pub(crate) mod pacer;
 mod prr;
 pub(crate) mod recovery;
 mod reno;
+mod own_resume;
 
 #[cfg(test)]
 mod test_sender;
