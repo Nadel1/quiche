@@ -364,7 +364,7 @@ pub struct LegacyRecovery {
 
 impl LegacyRecovery {
     pub fn new_with_config(recovery_config: &RecoveryConfig) -> Self {
-        let trace_id="ph"; //placeholder for now
+        let trace_id = "ph"; //placeholder for now
         Self {
             epochs: Default::default(),
 
@@ -609,6 +609,29 @@ impl RecoveryOps for LegacyRecovery {
             in_flight,
         );
 
+        // COPIED FROM https://github.com/ana-cc/quiche/blob/resume_latest/quiche/src/recovery/mod.rs (12.08.2025)
+        let bytes_acked = self.congestion.resume.total_acked;
+        let iw_acked = bytes_acked >= self.congestion.initial_congestion_window_packets;
+
+        if self.congestion.resume.enabled() && epoch == packet::Epoch::Application
+        {
+            let largest_sent_pkt = self.epochs[epoch]
+                .sent_packets
+                .iter()
+                .map(|p| p.pkt_num)
+                .max()
+                .unwrap_or_default();
+            // Increase the congestion window by a jump determined by careful resume
+            self.congestion.congestion_window +=
+                self.congestion.resume.send_packet(
+                    Some(self.rtt_stats.smoothed_rtt),
+                    self.congestion.congestion_window,
+                    largest_sent_pkt,
+                    self.congestion.app_limited,
+                    iw_acked,
+                );
+        }
+
         if in_flight {
             self.epochs[epoch].in_flight_count += 1;
             self.bytes_in_flight.add(sent_bytes, now);
@@ -704,10 +727,16 @@ impl RecoveryOps for LegacyRecovery {
         // COPIED FROM https://github.com/ana-cc/quiche/blob/resume_latest/quiche/src/recovery/mod.rs (12.08.2025)
         if self.congestion.resume.enabled() {
             for packet in self.newly_acked.iter() {
-                let largest_sent_pkt = self.epochs[epoch].sent_packets.iter().map(|p| p.pkt_num).max().unwrap_or_default();
-                let (new_cwnd, new_ssthresh) = self.congestion.resume.process_ack(
-                    largest_sent_pkt, packet, self.bytes_in_flight
-                );
+                let largest_sent_pkt = self.epochs[epoch]
+                    .sent_packets
+                    .iter()
+                    .map(|p| p.pkt_num)
+                    .max()
+                    .unwrap_or_default();
+                let (new_cwnd, new_ssthresh) = self
+                    .congestion
+                    .resume
+                    .process_ack(largest_sent_pkt, packet, self.bytes_in_flight);
                 if let Some(new_cwnd) = new_cwnd {
                     self.congestion.congestion_window = new_cwnd;
                 }
