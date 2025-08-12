@@ -1,12 +1,12 @@
 // Based on: https://github.com/ana-cc/quiche/blob/resume_latest/quiche/src/recovery/congestion/resume.rs (11.08.2025)
 
-use crate::recovery::congestion::Acked;
-use std::time::{Duration, Instant};
+use crate::recovery::congestion::{Acked, Congestion};
+use std::{cmp, f32::MIN, time::{Duration, Instant}};
 
 const CR_EVENT_MAXIMUM_GAP: Duration = Duration::from_secs(60);
-const MAX_JUMP:i32=2000;//configured max cwnd
+const MAX_JUMP:usize=2000;//configured max cwnd
 
-// No observe state as that always applies to the previous connection and never the current connection
+// No observe state as that always applies to the saved connection and never the current connection
 #[derive(Default, Debug, Copy, Clone, Eq, PartialEq)]
 pub enum CrState {
     #[default]
@@ -23,17 +23,18 @@ pub struct OwnResume {
     trace_id: String,
     enabled: bool,
     cr_state: CrState,
-    previous_rtt: Duration,
-    previous_cwnd: usize,
+    saved_rtt: Duration,
+    saved_cwnd: usize,
     pipesize: usize,
+    jump_cwnd:usize,
     pub total_acked: usize,
 }
 
 impl std::fmt::Debug for OwnResume {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "cr_state={:?} ", self.cr_state)?;
-        write!(f, "previous_rtt={:?} ", self.previous_rtt)?;
-        write!(f, "previous_cwnd={:?} ", self.previous_cwnd)?;
+        write!(f, "saved_rtt={:?} ", self.saved_rtt)?;
+        write!(f, "saved_cwnd={:?} ", self.saved_cwnd)?;
         write!(f, "pipesize={:?} ", self.pipesize)?;
 
         Ok(())
@@ -44,31 +45,31 @@ impl OwnResume {
     pub fn new(trace_id: &str) -> Self {
         // enabled will become false if either of the required CR ENV VARS is not supplied
         let mut enabled = true;
-        let mut previous_rtt = Duration::ZERO;
-        let mut previous_cwnd = 0;
+        let mut saved_rtt = Duration::ZERO;
+        let mut saved_cwnd = 0;
 
-        if let Some(jw_oss) = std::env::var_os("PREVIOUS_CWND_BYTES") {
-            println!("Found previous cwnd bytes!");
+        if let Some(jw_oss) = std::env::var_os("saved_CWND_BYTES") {
+            println!("Found saved cwnd bytes!");
             if let Ok(jw_string) = jw_oss.into_string() {
                 if let Ok(jw_int) = jw_string.parse::<usize>() {
-                    previous_cwnd = jw_int;
+                    saved_cwnd = jw_int;
                 }
             }
         } else {
-            println!("Didnt find previous cwnd bytes!");
+            println!("Didnt find saved cwnd bytes!");
             enabled = false;
         }
 
-        if let Some(rtt_oss) = std::env::var_os("PREVIOUS_RTT") {
-            println!("Found previous rtt!");
+        if let Some(rtt_oss) = std::env::var_os("saved_RTT") {
+            println!("Found saved rtt!");
             if let Ok(rtt_string) = rtt_oss.into_string() {
                 if let Ok(rtt_int) = rtt_string.parse::<usize>() {
-                    previous_rtt =
+                    saved_rtt =
                         Duration::from_millis(rtt_int.try_into().unwrap());
                 }
             }
         } else {
-            println!("Didnt find previous rtt!");
+            println!("Didnt find saved rtt!");
             enabled = false;
         }
 
@@ -80,17 +81,18 @@ impl OwnResume {
             trace_id: trace_id.to_string(),
             enabled,
             cr_state: CrState::default(),
-            previous_rtt,
-            previous_cwnd,
+            saved_rtt,
+            saved_cwnd,
+            jump_cwnd:0,
             pipesize: 0,
             total_acked: 0,
         }
     }
 
-    pub fn setup(&mut self, previous_rtt: Duration, previous_cwnd: usize) {
+    pub fn setup(&mut self, saved_rtt: Duration, saved_cwnd: usize) {
         self.enabled = true;
-        self.previous_rtt = previous_rtt;
-        self.previous_cwnd = previous_cwnd;
+        self.saved_rtt = saved_rtt;
+        self.saved_cwnd = saved_cwnd;
         println!("{} careful resume configured", self.trace_id);
     }
 
@@ -106,8 +108,8 @@ impl OwnResume {
         self.cr_state
     }
 
-    pub fn get_previous_cwnd(&self) -> f64 {
-        self.previous_cwnd as f64
+    pub fn get_saved_cwnd(&self) -> f64 {
+        self.saved_cwnd as f64
     }
 
     #[inline]
@@ -126,6 +128,9 @@ impl OwnResume {
             CrState::Reconnaissance=>{
                 if iw_acked{
                     self.change_state(CrState::Unvalidated(largest_pkt_sent));
+                    self.pipesize=flightsize;//initialise the pipesize to the flightsize
+                    self.jump_cwnd=cmp::min(MAX_JUMP,(self.saved_cwnd/2));
+                    //cwnd=jump_cwnd ?how do i set this??
                 }
                 (None,None)
             }
@@ -176,7 +181,7 @@ impl OwnResume {
 
     pub fn send_packet(
         &mut self, rtt_sample: Option<Duration>, cwnd: usize,
-        largest_pkt_sent: u64, app_limited: bool, iw_acked: bool,
+        largest_pkt_sent: u64, app_limited: bool, iw_acked: bool
     ) -> usize {
         println!("in send packet!!");
         // Do nothing when data limited to avoid having insufficient data
@@ -187,9 +192,17 @@ impl OwnResume {
         if !iw_acked {
             return 0;
         }
+        match self.cr_state {
+            CrState::Unvalidated(largest_packet)=>{
+                //Pacing ... somehow
+                let now = Instant::now();
+                //congestion.set_pacing_rate(rtt_sample.unwrap().as_secs(), now);
+            }
+            _ => return 0
+        }
         //else if  self.cr_state == CrState::Reconnaissance {//meaning iw is acked and we are in the recon phase --> go to unvalidated phase
         //    println!("-----Set jump in send_packet in resume-----");
-        //    let jump = (self.previous_cwnd / 2).saturating_sub(cwnd);// this should be done on entry to unvalidated phase
+        //    let jump = (self.saved_cwnd / 2).saturating_sub(cwnd);// this should be done on entry to unvalidated phase
 //
         //    if jump == 0 {
         //        self.change_state(CrState::Normal);
@@ -204,14 +217,14 @@ impl OwnResume {
         //        },
         //    };
 //
-        //    // Confirm RTT is similar to that of the previous connection
-        //    if current_rtt <= self.previous_rtt / 2
-        //        || current_rtt >= self.previous_rtt * 10
+        //    // Confirm RTT is similar to that of the saved connection
+        //    if current_rtt <= self.saved_rtt / 2
+        //        || current_rtt >= self.saved_rtt * 10
         //    {
         //        println!(
-        //            "{} current RTT too divergent from previous RTT - not using careful resume; \
-        //            rtt_sample={:?} previous_rtt={:?}",
-        //            self.trace_id, current_rtt, self.previous_rtt
+        //            "{} current RTT too divergent from saved RTT - not using careful resume; \
+        //            rtt_sample={:?} saved_rtt={:?}",
+        //            self.trace_id, current_rtt, self.saved_rtt
         //        );
         //        self.change_state(CrState::Normal);
         //        return 0;
