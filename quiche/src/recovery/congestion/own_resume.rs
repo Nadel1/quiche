@@ -17,7 +17,7 @@ pub enum CrState {
     SafeRetreat(u64),
     Normal,
 }
-
+//TODO: add deleted qlog metrics back in
 pub struct OwnResume {
     trace_id: String,
     enabled: bool,

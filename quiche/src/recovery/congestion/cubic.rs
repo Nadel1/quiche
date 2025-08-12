@@ -202,7 +202,7 @@ fn on_packet_acked(
 
         return;
     }
-
+    //no more data to send 
     if r.app_limited {
         return;
     }
@@ -234,7 +234,7 @@ fn on_packet_acked(
         // In Slow start, bytes_acked_sl is used for counting
         // acknowledged bytes.
         r.bytes_acked_sl += packet.size;
-
+        println!("Slow start!!");
         if r.bytes_acked_sl >= r.max_datagram_size {
             if r.hystart.in_css() {
                 r.congestion_window +=
