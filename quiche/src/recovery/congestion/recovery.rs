@@ -635,7 +635,7 @@ impl RecoveryOps for LegacyRecovery {
                     self.congestion.congestion_window,
                     largest_sent_pkt,
                     self.congestion.app_limited,
-                    iw_acked,
+                    iw_acked
                 );
         }
 
