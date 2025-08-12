@@ -113,15 +113,22 @@ impl OwnResume {
     #[inline]
     fn change_state(&mut self, state: CrState) {
         self.cr_state = state;
+        
     }
 
     // Returns (new_cwnd, new_ssthresh), both optional
     pub fn process_ack(
-        &mut self, largest_pkt_sent: u64, packet: &Acked, flightsize: usize,
+        &mut self, largest_pkt_sent: u64, packet: &Acked, flightsize: usize,iw_acked: bool
     ) -> (Option<usize>, Option<usize>) {
         println!("in process ack!!");
         self.total_acked += packet.size;
         match self.cr_state {
+            CrState::Reconnaissance=>{
+                if iw_acked{
+                    self.change_state(CrState::Unvalidated(largest_pkt_sent));
+                }
+                (None,None)
+            }
             CrState::Unvalidated(first_packet) => {
                 println!("in unvalidated phase!");
                 self.pipesize += packet.size;
@@ -180,46 +187,46 @@ impl OwnResume {
         if !iw_acked {
             return 0;
         }
-        else if  self.cr_state == CrState::Reconnaissance {//meaning iw is acked and we are in the recon phase --> go to unvalidated phase
-            //println!("-----Set jump in send_packet in resume-----");
-            //let jump = (self.previous_cwnd / 2).saturating_sub(cwnd);// this should be done on entry to unvalidated phase
+        //else if  self.cr_state == CrState::Reconnaissance {//meaning iw is acked and we are in the recon phase --> go to unvalidated phase
+        //    println!("-----Set jump in send_packet in resume-----");
+        //    let jump = (self.previous_cwnd / 2).saturating_sub(cwnd);// this should be done on entry to unvalidated phase
 //
-            //if jump == 0 {
-            //    self.change_state(CrState::Normal);
-            //    return 0;
-            //}
+        //    if jump == 0 {
+        //        self.change_state(CrState::Normal);
+        //        return 0;
+        //    }
 //
-            let current_rtt = match rtt_sample {
-                Some(s) => s,
-                None => {
-                    // Don't make any decisions until we have an RTT sample
-                    return 0;
-                },
-            };
-
-            // Confirm RTT is similar to that of the previous connection
-            if current_rtt <= self.previous_rtt / 2
-                || current_rtt >= self.previous_rtt * 10
-            {
-                println!(
-                    "{} current RTT too divergent from previous RTT - not using careful resume; \
-                    rtt_sample={:?} previous_rtt={:?}",
-                    self.trace_id, current_rtt, self.previous_rtt
-                );
-                self.change_state(CrState::Normal);
-                return 0;
-            }
-
-            // Store the first packet number that was sent in the Unvalidated Phase
-            println!(
-                "{} entering careful resume unvalidated phase",
-                self.trace_id
-            );
-            self.change_state(CrState::Unvalidated(largest_pkt_sent));
-            self.pipesize = cwnd;
-            // we return the jump in window, CC code handles the increase in cwnd
-            //return jump;
-        }
+        //    let current_rtt = match rtt_sample {
+        //        Some(s) => s,
+        //        None => {
+        //            // Don't make any decisions until we have an RTT sample
+        //            return 0;
+        //        },
+        //    };
+//
+        //    // Confirm RTT is similar to that of the previous connection
+        //    if current_rtt <= self.previous_rtt / 2
+        //        || current_rtt >= self.previous_rtt * 10
+        //    {
+        //        println!(
+        //            "{} current RTT too divergent from previous RTT - not using careful resume; \
+        //            rtt_sample={:?} previous_rtt={:?}",
+        //            self.trace_id, current_rtt, self.previous_rtt
+        //        );
+        //        self.change_state(CrState::Normal);
+        //        return 0;
+        //    }
+//
+        //    // Store the first packet number that was sent in the Unvalidated Phase
+        //    println!(
+        //        "{} entering careful resume unvalidated phase",
+        //        self.trace_id
+        //    );
+        //    self.change_state(CrState::Unvalidated(largest_pkt_sent));
+        //    self.pipesize = cwnd;
+        //    // we return the jump in window, CC code handles the increase in cwnd
+        //    //return jump;
+        //}
 
         0
     }
