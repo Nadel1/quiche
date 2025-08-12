@@ -512,7 +512,7 @@ impl LegacyRecovery {
             trace_id,
             epoch,
         );
-
+        //COPIED FROM https://github.com/ana-cc/quiche/tree/resume_latest (12.08.2025)
         if let Some(pkt) = loss.largest_lost_pkt {
             if !self.congestion.in_congestion_recovery(pkt.time_sent) {
                 (self.congestion.cc_ops.checkpoint)(&mut self.congestion);
@@ -526,8 +526,15 @@ impl LegacyRecovery {
                 now,
             );
 
-            self.bytes_in_flight
-                .saturating_subtract(loss.lost_bytes, now);
+            self.bytes_in_flight -= loss.lost_bytes;
+
+            if self.congestion.resume.enabled() {
+                let largest_sent_pkt = self.epochs[epoch].sent_packets.iter().map(|p| p.pkt_num).max().unwrap_or_default();
+                let new_cwnd = self.congestion.resume.congestion_event(largest_sent_pkt);
+                if new_cwnd != 0 {
+                    self.congestion.congestion_window = cmp::max(new_cwnd, self.congestion.initial_congestion_window_packets);
+                }
+            }
         };
 
         self.bytes_in_flight
