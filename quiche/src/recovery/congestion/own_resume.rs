@@ -4,6 +4,7 @@ use crate::recovery::congestion::Acked;
 use std::time::{Duration, Instant};
 
 const CR_EVENT_MAXIMUM_GAP: Duration = Duration::from_secs(60);
+const MAX_JUMP:i32=2000;//configured max cwnd
 
 // No observe state as that always applies to the previous connection and never the current connection
 #[derive(Default, Debug, Copy, Clone, Eq, PartialEq)]
@@ -179,15 +180,15 @@ impl OwnResume {
         if !iw_acked {
             return 0;
         }
-        if self.cr_state == CrState::Reconnaissance {
-            println!("-----Set jump in send_packet in resume-----");
-            let jump = (self.previous_cwnd / 2).saturating_sub(cwnd);
-
-            if jump == 0 {
-                self.change_state(CrState::Normal);
-                return 0;
-            }
-
+        else if  self.cr_state == CrState::Reconnaissance {//meaning iw is acked and we are in the recon phase --> go to unvalidated phase
+            //println!("-----Set jump in send_packet in resume-----");
+            //let jump = (self.previous_cwnd / 2).saturating_sub(cwnd);// this should be done on entry to unvalidated phase
+//
+            //if jump == 0 {
+            //    self.change_state(CrState::Normal);
+            //    return 0;
+            //}
+//
             let current_rtt = match rtt_sample {
                 Some(s) => s,
                 None => {
@@ -217,7 +218,7 @@ impl OwnResume {
             self.change_state(CrState::Unvalidated(largest_pkt_sent));
             self.pipesize = cwnd;
             // we return the jump in window, CC code handles the increase in cwnd
-            return jump;
+            //return jump;
         }
 
         0
