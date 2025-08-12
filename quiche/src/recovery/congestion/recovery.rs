@@ -730,6 +730,9 @@ impl RecoveryOps for LegacyRecovery {
             self.detect_lost_packets(epoch, now, trace_id);
 
         // COPIED FROM https://github.com/ana-cc/quiche/blob/resume_latest/quiche/src/recovery/mod.rs (12.08.2025)
+        let bytes_acked = self.congestion.resume.total_acked;
+        let iw_acked = bytes_acked >= self.congestion.initial_congestion_window_packets;
+
         if self.congestion.resume.enabled() {
             for packet in self.newly_acked.iter() {
                 let largest_sent_pkt = self.epochs[epoch]
@@ -741,7 +744,7 @@ impl RecoveryOps for LegacyRecovery {
                 let (new_cwnd, new_ssthresh) = self
                     .congestion
                     .resume
-                    .process_ack(largest_sent_pkt, packet, self.bytes_in_flight);
+                    .process_ack(largest_sent_pkt, packet, self.bytes_in_flight,iw_acked);
                 if let Some(new_cwnd) = new_cwnd {
                     self.congestion.congestion_window = new_cwnd;
                 }
