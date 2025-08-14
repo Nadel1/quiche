@@ -1,9 +1,8 @@
 // Based on: https://github.com/ana-cc/quiche/blob/resume_latest/quiche/src/recovery/congestion/resume.rs (11.08.2025)
 
-use crate::recovery::congestion::{Acked, Congestion};
+use crate::recovery::congestion::Acked;
 use std::{
     cmp,
-    f32::MIN,
     time::{Duration, Instant},
 };
 
@@ -67,23 +66,17 @@ impl OwnResume {
         }
 
         if let Some(rtt_oss) = std::env::var_os("SAVED_RTT") {
-            println!("Found saved rtt!");
             if let Ok(rtt_string) = rtt_oss.into_string() {
                 if let Ok(rtt_int) = rtt_string.parse::<usize>() {
                     saved_rtt =
                         Duration::from_millis(rtt_int.try_into().unwrap());
+                    println!("Found saved rtt! {:?}", saved_rtt);
                 }
             }
         } else {
             println!("Didnt find saved rtt!");
             enabled = false;
         }
-
-        if let Some(no_sr_oss) = std::env::var_os("DISABLE_SR") {
-            println!("Found disable sr!");
-        }
-
-        let now = Instant::now();
 
         Self {
             time_in_state: Instant::now(),
@@ -108,15 +101,19 @@ impl OwnResume {
     pub fn enabled(&self) -> bool {
         println!("In enabled! cr state is {:?}", self.cr_state);
         if self.enabled {
+            println!("is enabled");
             self.cr_state != CrState::Normal
         } else {
+            println!("not enabled");
             false
         }
     }
     pub fn get_state(&self) -> CrState {
         self.cr_state
     }
-
+    pub fn get_pipesize(&self) -> usize {
+        self.pipesize
+    }
     pub fn get_saved_cwnd(&self) -> f64 {
         self.saved_cwnd as f64
     }
@@ -146,7 +143,7 @@ impl OwnResume {
                     self.update_state_timer();
                     self.change_state(CrState::Unvalidated(largest_pkt_sent));
                     self.pipesize = flightsize; //initialise the pipesize to the flightsize
-                    self.jump_cwnd = cmp::min(MAX_JUMP, (self.saved_cwnd / 2));
+                    self.jump_cwnd = cmp::min(MAX_JUMP, self.saved_cwnd / 2);
                     //cwnd=jump_cwnd ?how do i set this??
                 }
                 (None, None)
@@ -205,17 +202,17 @@ impl OwnResume {
 
     pub fn send_packet(
         &mut self, rtt_sample: Option<Duration>, cwnd: usize,
-        largest_pkt_sent: u64, app_limited: bool, iw_acked: bool,
+        _largest_pkt_sent: u64, app_limited: bool, iw_acked: bool,
     ) -> usize {
-        println!("in send packet!!");
+        println!("in send packet!! app limited is {}, iw_acked is {}",app_limited,iw_acked);
         // Do nothing when data limited to avoid having insufficient data
         // to be able to validate transmission at a higher rate
         if app_limited {
             return 0;
         }
-        if !iw_acked {
-            return 0;
-        }
+        //if !iw_acked {
+        //    return 0;
+        //}
         match self.cr_state {
             CrState::Reconnaissance => {
                 //check rtt in recon: path changed or rtt too small?
@@ -223,7 +220,7 @@ impl OwnResume {
                     Some(s) => s,
                     None => {
                         // Don't make any decisions until we have an RTT sample
-                        return 0;
+                        return cwnd;
                     },
                 };
                 // Confirm RTT is similar to that of the saved connection
@@ -237,10 +234,16 @@ impl OwnResume {
                     self.trace_id, current_rtt, self.saved_rtt
                 );
                     self.change_state(CrState::Normal);
-                    return 0;
+                    return cwnd;
                 }
             },
-            _ => return 0,
+            CrState::Unvalidated(_) => {
+                return self.get_jump_cwnd(); //sets the cwnd to jump cwnd
+            },
+            CrState::SafeRetreat(_) => {
+                return self.get_pipesize() / 2;
+            },
+            _ => return cwnd,
         }
         //else if  self.cr_state == CrState::Reconnaissance {//meaning iw is acked and we are in the recon phase --> go to unvalidated phase
         //    println!("-----Set jump in send_packet in resume-----");
@@ -304,7 +307,7 @@ impl OwnResume {
                 self.change_state(CrState::SafeRetreat(largest_pkt_sent));
                 0
             },
-            CrState::Validating(p) => {
+            CrState::Validating(_) => {
                 println!("{} congestion during validating phase", self.trace_id);
 
                 // TODO: mark used CR parameters as invalid for future connections
