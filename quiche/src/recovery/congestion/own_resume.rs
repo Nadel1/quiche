@@ -48,7 +48,7 @@ impl OwnResume {
         let mut saved_rtt = Duration::ZERO;
         let mut saved_cwnd = 0;
 
-        if let Some(jw_oss) = std::env::var_os("saved_CWND_BYTES") {
+        if let Some(jw_oss) = std::env::var_os("SAVED_CWND_BYTES") {
             println!("Found saved cwnd bytes!");
             if let Ok(jw_string) = jw_oss.into_string() {
                 if let Ok(jw_int) = jw_string.parse::<usize>() {
@@ -60,7 +60,7 @@ impl OwnResume {
             enabled = false;
         }
 
-        if let Some(rtt_oss) = std::env::var_os("saved_RTT") {
+        if let Some(rtt_oss) = std::env::var_os("SAVED_RTT") {
             println!("Found saved rtt!");
             if let Ok(rtt_string) = rtt_oss.into_string() {
                 if let Ok(rtt_int) = rtt_string.parse::<usize>() {
@@ -116,6 +116,9 @@ impl OwnResume {
     fn change_state(&mut self, state: CrState) {
         self.cr_state = state;
         
+    }
+    pub fn get_jump_cwnd(&self)->usize{
+        self.jump_cwnd
     }
 
     // Returns (new_cwnd, new_ssthresh), both optional
@@ -259,7 +262,7 @@ impl OwnResume {
                 //    );
                 //    self.pipesize / 2
 
-                self.change_state(CrState::Normal);
+                self.change_state(CrState::SafeRetreat(largest_pkt_sent));
                 0
             },
             CrState::Validating(p) => {
