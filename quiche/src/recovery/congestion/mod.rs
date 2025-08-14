@@ -262,12 +262,16 @@ impl Congestion {
                 let rate = PACING_MULTIPLIER * self.congestion_window as f64
                     / rtt_stats.smoothed_rtt.as_secs_f64();
                 self.set_pacing_rate(rate as u64, now);
-            } else if self.resume.get_state() == own_resume::CrState::Unvalidated(pkt.pkt_num)
+            } else if self.resume.get_state()
+                == own_resume::CrState::Unvalidated(pkt.pkt_num)
             {
-                //pacing based on rtt in unvalidated state
-                let rate = rtt_stats.latest_rtt().as_secs_f64();
-                self.set_pacing_rate(rate as u64, now);
-                self.congestion_window=self.resume.get_jump_cwnd();//set congestion window to size of jump_cwnd calculated by cr
+                //see page 19 of https://datatracker.ietf.org/doc/draft-ietf-tsvwg-careful-resume/
+                let inter_transmission_time: u64 =
+                    (rtt_stats.latest_rtt().as_secs()
+                        * self.max_datagram_size as u64)
+                        / self.resume.get_jump_cwnd() as u64;
+                self.set_pacing_rate(inter_transmission_time, now);
+                self.congestion_window = self.resume.get_jump_cwnd(); //set congestion window to size of jump_cwnd calculated by cr
             }
             {
                 //send faster in unvalidated phase

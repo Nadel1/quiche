@@ -1,10 +1,14 @@
 // Based on: https://github.com/ana-cc/quiche/blob/resume_latest/quiche/src/recovery/congestion/resume.rs (11.08.2025)
 
 use crate::recovery::congestion::{Acked, Congestion};
-use std::{cmp, f32::MIN, time::{Duration, Instant}};
+use std::{
+    cmp,
+    f32::MIN,
+    time::{Duration, Instant},
+};
 
 const CR_EVENT_MAXIMUM_GAP: Duration = Duration::from_secs(60);
-const MAX_JUMP:usize=2000;//configured max cwnd
+const MAX_JUMP: usize = 2000; //configured max cwnd
 
 // No observe state as that always applies to the saved connection and never the current connection
 #[derive(Default, Debug, Copy, Clone, Eq, PartialEq)]
@@ -26,8 +30,9 @@ pub struct OwnResume {
     saved_rtt: Duration,
     saved_cwnd: usize,
     pipesize: usize,
-    jump_cwnd:usize,
+    jump_cwnd: usize,
     pub total_acked: usize,
+    last_update: Instant, //saved timestamp to check lifetime of params
 }
 
 impl std::fmt::Debug for OwnResume {
@@ -46,6 +51,7 @@ impl OwnResume {
         // enabled will become false if either of the required CR ENV VARS is not supplied
         let mut enabled = true;
         let mut saved_rtt = Duration::ZERO;
+        let mut last_update=Instant::now();
         let mut saved_cwnd = 0;
 
         if let Some(jw_oss) = std::env::var_os("SAVED_CWND_BYTES") {
@@ -73,17 +79,21 @@ impl OwnResume {
             enabled = false;
         }
 
+
         if let Some(no_sr_oss) = std::env::var_os("DISABLE_SR") {
             println!("Found disable sr!");
         }
 
+        let now=Instant::now();
+
         Self {
+            last_update:now,
             trace_id: trace_id.to_string(),
             enabled,
             cr_state: CrState::default(),
             saved_rtt,
             saved_cwnd,
-            jump_cwnd:0,
+            jump_cwnd: 0,
             pipesize: 0,
             total_acked: 0,
         }
@@ -97,7 +107,7 @@ impl OwnResume {
     }
 
     pub fn enabled(&self) -> bool {
-        println!("In enabled! cr state is {:?}",self.cr_state);
+        println!("In enabled! cr state is {:?}", self.cr_state);
         if self.enabled {
             self.cr_state != CrState::Normal
         } else {
@@ -115,28 +125,28 @@ impl OwnResume {
     #[inline]
     fn change_state(&mut self, state: CrState) {
         self.cr_state = state;
-        
     }
-    pub fn get_jump_cwnd(&self)->usize{
+    pub fn get_jump_cwnd(&self) -> usize {
         self.jump_cwnd
     }
 
     // Returns (new_cwnd, new_ssthresh), both optional
     pub fn process_ack(
-        &mut self, largest_pkt_sent: u64, packet: &Acked, flightsize: usize,iw_acked: bool
+        &mut self, largest_pkt_sent: u64, packet: &Acked, flightsize: usize,
+        iw_acked: bool,
     ) -> (Option<usize>, Option<usize>) {
         println!("in process ack!!");
         self.total_acked += packet.size;
         match self.cr_state {
-            CrState::Reconnaissance=>{
-                if iw_acked{
+            CrState::Reconnaissance => {
+                if iw_acked {
                     self.change_state(CrState::Unvalidated(largest_pkt_sent));
-                    self.pipesize=flightsize;//initialise the pipesize to the flightsize
-                    self.jump_cwnd=cmp::min(MAX_JUMP,(self.saved_cwnd/2));
+                    self.pipesize = flightsize; //initialise the pipesize to the flightsize
+                    self.jump_cwnd = cmp::min(MAX_JUMP, (self.saved_cwnd / 2));
                     //cwnd=jump_cwnd ?how do i set this??
                 }
-                (None,None)
-            }
+                (None, None)
+            },
             CrState::Unvalidated(first_packet) => {
                 println!("in unvalidated phase!");
                 self.pipesize += packet.size;
@@ -184,7 +194,7 @@ impl OwnResume {
 
     pub fn send_packet(
         &mut self, rtt_sample: Option<Duration>, cwnd: usize,
-        largest_pkt_sent: u64, app_limited: bool, iw_acked: bool
+        largest_pkt_sent: u64, app_limited: bool, iw_acked: bool,
     ) -> usize {
         println!("in send packet!!");
         // Do nothing when data limited to avoid having insufficient data
@@ -196,22 +206,40 @@ impl OwnResume {
             return 0;
         }
         match self.cr_state {
-            CrState::Unvalidated(largest_packet)=>{
-                //Pacing ... somehow
-                let now = Instant::now();
-                //congestion.set_pacing_rate(rtt_sample.unwrap().as_secs(), now);
-            }
-            _ => return 0
+            CrState::Reconnaissance => {
+                //check rtt in recon: path changed or rtt too small?
+                let current_rtt = match rtt_sample {
+                    Some(s) => s,
+                    None => {
+                        // Don't make any decisions until we have an RTT sample
+                        return 0;
+                    },
+                };
+                // Confirm RTT is similar to that of the saved connection
+                if current_rtt <= self.saved_rtt / 2
+                    || current_rtt >= self.saved_rtt * 10
+                // this is arbitrary, but seems to make somewhat sense
+                {
+                    println!(
+                    "{} current RTT too divergent from saved RTT - not using careful resume; \
+                    rtt_sample={:?} saved_rtt={:?}",
+                    self.trace_id, current_rtt, self.saved_rtt
+                );
+                    self.change_state(CrState::Normal);
+                    return 0;
+                }
+            },
+            _ => return 0,
         }
         //else if  self.cr_state == CrState::Reconnaissance {//meaning iw is acked and we are in the recon phase --> go to unvalidated phase
         //    println!("-----Set jump in send_packet in resume-----");
         //    let jump = (self.saved_cwnd / 2).saturating_sub(cwnd);// this should be done on entry to unvalidated phase
-//
+        //
         //    if jump == 0 {
         //        self.change_state(CrState::Normal);
         //        return 0;
         //    }
-//
+        //
         //    let current_rtt = match rtt_sample {
         //        Some(s) => s,
         //        None => {
@@ -219,7 +247,7 @@ impl OwnResume {
         //            return 0;
         //        },
         //    };
-//
+        //
         //    // Confirm RTT is similar to that of the saved connection
         //    if current_rtt <= self.saved_rtt / 2
         //        || current_rtt >= self.saved_rtt * 10
@@ -232,7 +260,7 @@ impl OwnResume {
         //        self.change_state(CrState::Normal);
         //        return 0;
         //    }
-//
+        //
         //    // Store the first packet number that was sent in the Unvalidated Phase
         //    println!(
         //        "{} entering careful resume unvalidated phase",
@@ -351,10 +379,7 @@ impl CRMetrics {
 
         println!(
             "{} maybe_update(new_min_rtt={:?}, new_cwnd={}); updating={}",
-            self.trace_id,
-            new_min_rtt,
-            new_cwnd,
-            should_update
+            self.trace_id, new_min_rtt, new_cwnd, should_update
         );
 
         if should_update {
