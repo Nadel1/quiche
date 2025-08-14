@@ -32,7 +32,7 @@ pub struct OwnResume {
     pipesize: usize,
     jump_cwnd: usize,
     pub total_acked: usize,
-    last_update: Instant, //saved timestamp to check lifetime of params
+    time_in_state: Instant, //make sure we dont stay in unvalidated phase longer than one rtt
 }
 
 impl std::fmt::Debug for OwnResume {
@@ -51,7 +51,7 @@ impl OwnResume {
         // enabled will become false if either of the required CR ENV VARS is not supplied
         let mut enabled = true;
         let mut saved_rtt = Duration::ZERO;
-        let mut last_update=Instant::now();
+
         let mut saved_cwnd = 0;
 
         if let Some(jw_oss) = std::env::var_os("SAVED_CWND_BYTES") {
@@ -79,15 +79,14 @@ impl OwnResume {
             enabled = false;
         }
 
-
         if let Some(no_sr_oss) = std::env::var_os("DISABLE_SR") {
             println!("Found disable sr!");
         }
 
-        let now=Instant::now();
+        let now = Instant::now();
 
         Self {
-            last_update:now,
+            time_in_state: Instant::now(),
             trace_id: trace_id.to_string(),
             enabled,
             cr_state: CrState::default(),
@@ -130,6 +129,10 @@ impl OwnResume {
         self.jump_cwnd
     }
 
+    fn update_state_timer(&mut self) {
+        self.time_in_state = Instant::now()
+    }
+
     // Returns (new_cwnd, new_ssthresh), both optional
     pub fn process_ack(
         &mut self, largest_pkt_sent: u64, packet: &Acked, flightsize: usize,
@@ -140,6 +143,7 @@ impl OwnResume {
         match self.cr_state {
             CrState::Reconnaissance => {
                 if iw_acked {
+                    self.update_state_timer();
                     self.change_state(CrState::Unvalidated(largest_pkt_sent));
                     self.pipesize = flightsize; //initialise the pipesize to the flightsize
                     self.jump_cwnd = cmp::min(MAX_JUMP, (self.saved_cwnd / 2));
@@ -149,13 +153,20 @@ impl OwnResume {
             },
             CrState::Unvalidated(first_packet) => {
                 println!("in unvalidated phase!");
+                //check that we leave unvalidated phase after 1 rtt
+                let now = Instant::now();
+                if now - self.time_in_state > self.saved_rtt {
+                    self.change_state(CrState::Validating(largest_pkt_sent));
+                }
                 self.pipesize += packet.size;
+
                 if packet.pkt_num >= first_packet {
                     if flightsize <= self.pipesize {
                         println!("{} careful resume complete", self.trace_id);
                         self.change_state(CrState::Normal);
                         (Some(self.pipesize), None)
                     } else {
+                        //received ack for unvalidated packet
                         println!(
                             "{} entering careful resume validating phase",
                             self.trace_id
