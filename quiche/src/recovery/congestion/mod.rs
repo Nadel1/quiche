@@ -255,10 +255,25 @@ impl Congestion {
         }
 
         // Pacing: Set the pacing rate if CC doesn't do its own.
+        // COPIED from https://github.com/ana-cc/quiche/blob/resume_latest/quiche/src/recovery/congestion/mod.rs (14.08.2025)
+
         if !(self.cc_ops.has_custom_pacing)() && rtt_stats.has_first_rtt_sample {
-            let rate = PACING_MULTIPLIER * self.congestion_window as f64
-                / rtt_stats.smoothed_rtt.as_secs_f64();
-            self.set_pacing_rate(rate as u64, now);
+            if self.resume.get_state() == own_resume::CrState::Normal {
+                let rate = PACING_MULTIPLIER * self.congestion_window as f64
+                    / rtt_stats.smoothed_rtt.as_secs_f64();
+                self.set_pacing_rate(rate as u64, now);
+            } else if self.resume.get_state() == own_resume::CrState::Unvalidated(pkt.pkt_num)
+            {
+                //pacing based on rtt in unvalidated state
+                let rate = rtt_stats.latest_rtt().as_secs_f64();
+                self.set_pacing_rate(rate as u64, now);
+                self.congestion_window=self.resume.get_jump_cwnd();//set congestion window to size of jump_cwnd calculated by cr
+            }
+            {
+                //send faster in unvalidated phase
+                let rate = rtt_stats.rtt().as_secs_f64();
+                self.set_pacing_rate(rate as u64, now);
+            }
         }
 
         self.schedule_next_packet(now, sent_bytes);
