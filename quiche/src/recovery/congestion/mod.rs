@@ -256,29 +256,33 @@ impl Congestion {
 
         // Pacing: Set the pacing rate if CC doesn't do its own.
         // COPIED from https://github.com/ana-cc/quiche/blob/resume_latest/quiche/src/recovery/congestion/mod.rs (14.08.2025)
-
-        if !(self.cc_ops.has_custom_pacing)() && rtt_stats.has_first_rtt_sample {
-            if self.resume.get_state() == own_resume::CrState::Normal {
-                let rate = PACING_MULTIPLIER * self.congestion_window as f64
-                    / rtt_stats.smoothed_rtt.as_secs_f64();
-                self.set_pacing_rate(rate as u64, now);
-            } else if self.resume.get_state()
-                == own_resume::CrState::Unvalidated(pkt.pkt_num)
-            {
-                //see page 19 of https://datatracker.ietf.org/doc/draft-ietf-tsvwg-careful-resume/
-                let inter_transmission_time: u64 =
-                    (rtt_stats.latest_rtt().as_secs()
-                        * self.max_datagram_size as u64)
-                        / self.resume.get_jump_cwnd() as u64;
-                self.set_pacing_rate(inter_transmission_time, now);
-                self.congestion_window = self.resume.get_jump_cwnd(); //set congestion window to size of jump_cwnd calculated by cr
-            }
-            {
-                //send faster in unvalidated phase
-                let rate = rtt_stats.rtt().as_secs_f64();
-                self.set_pacing_rate(rate as u64, now);
-            }
+        match self.resume.get_state() {
+            own_resume::CrState::Normal => {
+                if !(self.cc_ops.has_custom_pacing)()
+                    && rtt_stats.has_first_rtt_sample
+                {
+                    let rate = PACING_MULTIPLIER * self.congestion_window as f64
+                        / rtt_stats.smoothed_rtt.as_secs_f64();
+                    self.set_pacing_rate(rate as u64, now);
+                }
+            },
+            own_resume::CrState::Unvalidated(_) => {
+                if !(self.cc_ops.has_custom_pacing)()
+                    && rtt_stats.has_first_rtt_sample
+                {
+                    //see page 19 of https://datatracker.ietf.org/doc/draft-ietf-tsvwg-careful-resume/
+                    let inter_transmission_time: u64 =
+                        (rtt_stats.latest_rtt().as_secs()
+                            * self.max_datagram_size as u64)
+                            / self.resume.get_jump_cwnd() as u64;
+                    self.set_pacing_rate(inter_transmission_time, now);
+                    
+                }
+            },
+            _ => {},
         }
+
+        if !(self.cc_ops.has_custom_pacing)() && rtt_stats.has_first_rtt_sample {}
 
         self.schedule_next_packet(now, sent_bytes);
 
@@ -287,6 +291,8 @@ impl Congestion {
         // bytes_in_flight is already updated. Use previous value.
         self.delivery_rate
             .on_packet_sent(pkt, bytes_in_flight, bytes_lost);
+
+        
     }
 
     pub(crate) fn on_packets_acked(
