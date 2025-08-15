@@ -3,9 +3,15 @@
 use crate::recovery::congestion::Acked;
 use std::{
     cmp,
+    fs::{read_to_string, File},
+    io::{Read, Write},
     time::{Duration, Instant},
 };
+//write back saved cc params to file
+use std::fs;
+use std::path::Path;
 
+const SAVED_CC_FILE: &str = "saved_params.csv";
 const CR_EVENT_MAXIMUM_GAP: Duration = Duration::from_secs(60);
 const MAX_JUMP: usize = 2000; //configured max cwnd
 
@@ -32,6 +38,8 @@ pub struct OwnResume {
     jump_cwnd: usize,
     pub total_acked: usize,
     time_in_state: Instant, //make sure we dont stay in unvalidated phase longer than one rtt
+    cwnd: usize,
+    rtt: Option<Duration>,
 }
 
 impl std::fmt::Debug for OwnResume {
@@ -46,37 +54,59 @@ impl std::fmt::Debug for OwnResume {
 }
 
 impl OwnResume {
-    pub fn new(trace_id: &str) -> Self {
+    pub fn new(trace_id: &str, file_name: &str) -> Self {
         // enabled will become false if either of the required CR ENV VARS is not supplied
         let mut enabled = true;
         let mut saved_rtt = Duration::ZERO;
 
         let mut saved_cwnd = 0;
+        if Path::new(SAVED_CC_FILE).is_file() {
+            let file_contents = fs::read_to_string(file_name).unwrap();
+            println!("info.txt content =\n{file_contents}");
+            let file_array: Vec<&str> = file_contents.split(',').collect();
+            let rtt_string = file_array[1];
+            if let Ok(rtt_int) = rtt_string.parse::<i128>() {
+                saved_rtt = Duration::from_millis(rtt_int.try_into().unwrap());
+                println!("Found saved rtt! {:?}", saved_rtt);
+            } else {
+                println!("Didnt find rtt");
+            }
 
-        if let Some(jw_oss) = std::env::var_os("SAVED_CWND_BYTES") {
-            println!("Found saved cwnd bytes!");
-            if let Ok(jw_string) = jw_oss.into_string() {
-                if let Ok(jw_int) = jw_string.parse::<usize>() {
-                    saved_cwnd = jw_int;
-                }
+            let cwnd_string = file_array[3];
+            if let Ok(cwnd_int) = cwnd_string.parse::<usize>() {
+                saved_cwnd = cwnd_int;
+                println!("Found saved cwnd! {:?}", saved_cwnd);
+            } else {
+                println!("Didnt find cwnd");
             }
         } else {
-            println!("Didnt find saved cwnd bytes!");
             enabled = false;
         }
 
-        if let Some(rtt_oss) = std::env::var_os("SAVED_RTT") {
-            if let Ok(rtt_string) = rtt_oss.into_string() {
-                if let Ok(rtt_int) = rtt_string.parse::<usize>() {
-                    saved_rtt =
-                        Duration::from_millis(rtt_int.try_into().unwrap());
-                    println!("Found saved rtt! {:?}", saved_rtt);
-                }
-            }
-        } else {
-            println!("Didnt find saved rtt!");
-            enabled = false;
-        }
+        //if let Some(jw_oss) = std::env::var_os("SAVED_CWND_BYTES") {
+        //    println!("Found saved cwnd bytes!");
+        //    if let Ok(jw_string) = jw_oss.into_string() {
+        //        if let Ok(jw_int) = jw_string.parse::<usize>() {
+        //            saved_cwnd = jw_int;
+        //        }
+        //    }
+        //} else {
+        //    println!("Didnt find saved cwnd bytes!");
+        //    enabled = false;
+        //}
+
+        //if let Some(rtt_oss) = std::env::var_os("SAVED_RTT") {
+        //    if let Ok(rtt_string) = rtt_oss.into_string() {
+        //        if let Ok(rtt_int) = rtt_string.parse::<usize>() {
+        //            saved_rtt =
+        //                Duration::from_millis(rtt_int.try_into().unwrap());
+        //            println!("Found saved rtt! {:?}", saved_rtt);
+        //        }
+        //    }
+        //} else {
+        //    println!("Didnt find saved rtt!");
+        //    enabled = false;
+        //}
 
         Self {
             time_in_state: Instant::now(),
@@ -88,6 +118,8 @@ impl OwnResume {
             jump_cwnd: 0,
             pipesize: 0,
             total_acked: 0,
+            rtt: Some(Duration::ZERO),
+            cwnd: 0,
         }
     }
 
@@ -130,6 +162,15 @@ impl OwnResume {
         self.time_in_state = Instant::now()
     }
 
+    fn write_to_file(&mut self) {
+        if Path::new(SAVED_CC_FILE).is_file() {
+            let _ = fs::remove_file(SAVED_CC_FILE);
+        }
+        let mut file = File::create_new(SAVED_CC_FILE).unwrap();
+        let mut save_string = "SAVED_RTT ".to_owned();
+        save_string.push_str(&self.saved_rtt.as_millis().to_string());
+        let _ = file.write_all(save_string.as_bytes());
+    }
     // Returns (new_cwnd, new_ssthresh), both optional
     pub fn process_ack(
         &mut self, largest_pkt_sent: u64, packet: &Acked, flightsize: usize,
@@ -200,19 +241,25 @@ impl OwnResume {
         }
     }
 
+    //returns cwnd
     pub fn send_packet(
         &mut self, rtt_sample: Option<Duration>, cwnd: usize,
         _largest_pkt_sent: u64, app_limited: bool, iw_acked: bool,
     ) -> usize {
-        println!("in send packet!! app limited is {}, iw_acked is {}",app_limited,iw_acked);
+        println!(
+            "in send packet!! app limited is {}, iw_acked is {}",
+            app_limited, iw_acked
+        );
+        self.cwnd = cwnd;
+        self.rtt = rtt_sample;
         // Do nothing when data limited to avoid having insufficient data
         // to be able to validate transmission at a higher rate
         if app_limited {
-            return 0;
+            return self.saved_cwnd;
         }
-        //if !iw_acked {
-        //    return 0;
-        //}
+        if !iw_acked {
+            return self.saved_cwnd;
+        }
         match self.cr_state {
             CrState::Reconnaissance => {
                 //check rtt in recon: path changed or rtt too small?

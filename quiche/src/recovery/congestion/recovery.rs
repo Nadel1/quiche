@@ -36,7 +36,6 @@ use super::Sent;
 
 use crate::packet::Epoch;
 use crate::ranges::RangeSet;
-use crate::recovery::congestion::own_resume;
 use crate::recovery::Bandwidth;
 use crate::recovery::HandshakeStatus;
 use crate::recovery::OnLossDetectionTimeoutOutcome;
@@ -630,7 +629,8 @@ impl RecoveryOps for LegacyRecovery {
         let iw_acked =
             bytes_acked >= self.congestion.initial_congestion_window_packets;
 
-        if self.congestion.resume.enabled() //&& epoch == packet::Epoch::Application
+        if self.congestion.resume.enabled()
+        //&& epoch == packet::Epoch::Application
         {
             let largest_sent_pkt = self.epochs[epoch]
                 .sent_packets
@@ -744,7 +744,6 @@ impl RecoveryOps for LegacyRecovery {
         let bytes_acked = self.congestion.resume.total_acked;
         let iw_acked =
             bytes_acked >= self.congestion.initial_congestion_window_packets;
-
         if self.congestion.resume.enabled() {
             for packet in self.newly_acked.iter() {
                 let largest_sent_pkt = self.epochs[epoch]
@@ -767,11 +766,6 @@ impl RecoveryOps for LegacyRecovery {
                     self.congestion.ssthresh = new_ssthresh;
                 }
             }
-        }else{
-            //write out cwnd and rtt
-            println!("write out cwnd {} and rtt {}",self.cwnd().to_string(),self.rtt().as_secs().to_string());
-            std::env::set_var("SAVED_CWND_BYTES", "42069");//self.cwnd().to_string());
-            std::env::set_var("SAVED_RTT","trolololol");// self.rtt().as_secs().to_string());
         }
 
         self.congestion.on_packets_acked(

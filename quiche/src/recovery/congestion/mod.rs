@@ -25,6 +25,10 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use debug_panic::debug_panic;
+use std::fs;
+use std::fs::File;
+use std::io::Write;
+use std::path::Path;
 use std::time::{Duration, Instant};
 
 use self::recovery::Acked;
@@ -37,6 +41,7 @@ use crate::recovery::CongestionControlAlgorithm;
 use crate::StartupExit;
 use crate::StartupExitReason;
 
+const SAVED_CC_FILE: &str = "saved_params.csv";
 pub const PACING_MULTIPLIER: f64 = 1.25;
 
 pub struct SsThresh {
@@ -189,7 +194,7 @@ impl Congestion {
 
             bbr2_state: bbr2::State::new(),
 
-            resume: own_resume::OwnResume::new(trace_id),
+            resume: own_resume::OwnResume::new(trace_id, SAVED_CC_FILE),
             cr_metrics: own_resume::CRMetrics::new(
                 trace_id,
                 initial_congestion_window,
@@ -230,6 +235,17 @@ impl Congestion {
 
     fn update_app_limited(&mut self, v: bool) {
         self.app_limited = v;
+    }
+    fn write_params_to_file(&mut self, rtt_stats: &RttStats) {
+        if Path::new(SAVED_CC_FILE).is_file() {
+            let _ = fs::remove_file(SAVED_CC_FILE);
+        }
+        let mut file = File::create_new(SAVED_CC_FILE).unwrap();
+        let mut save_string = "SAVED_RTT,".to_owned();
+        save_string.push_str(&rtt_stats.latest_rtt().as_millis().to_string());
+        save_string.push_str(",SAVED_CWND,");
+        save_string.push_str(&self.congestion_window.to_string());
+        let _ = file.write_all(save_string.as_bytes());
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -276,7 +292,6 @@ impl Congestion {
                             * self.max_datagram_size as u64)
                             / self.resume.get_jump_cwnd() as u64;
                     self.set_pacing_rate(inter_transmission_time, now);
-                    
                 }
             },
             _ => {},
@@ -291,8 +306,6 @@ impl Congestion {
         // bytes_in_flight is already updated. Use previous value.
         self.delivery_rate
             .on_packet_sent(pkt, bytes_in_flight, bytes_lost);
-
-        
     }
 
     pub(crate) fn on_packets_acked(
@@ -315,6 +328,7 @@ impl Congestion {
             now,
             rtt_stats,
         );
+        self.write_params_to_file(rtt_stats);
     }
 
     fn schedule_next_packet(&mut self, now: Instant, packet_size: usize) {
