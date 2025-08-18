@@ -237,10 +237,7 @@ impl Congestion {
         self.app_limited = v;
     }
     fn write_params_to_file(&mut self, rtt_stats: &RttStats) {
-        if Path::new(SAVED_CC_FILE).is_file() {
-            let _ = fs::remove_file(SAVED_CC_FILE);
-        }
-        let mut file = File::create_new(SAVED_CC_FILE).unwrap();
+        let mut file = File::create(SAVED_CC_FILE).unwrap();
         let mut save_string = "SAVED_RTT,".to_owned();
         save_string.push_str(&rtt_stats.latest_rtt().as_millis().to_string());
         save_string.push_str(",SAVED_CWND,");
