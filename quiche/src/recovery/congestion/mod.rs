@@ -25,11 +25,11 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use debug_panic::debug_panic;
-use std::fs;
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
 use std::time::{Duration, Instant};
+use std::{fs, u64};
 
 use self::recovery::Acked;
 use super::bandwidth::Bandwidth;
@@ -139,6 +139,9 @@ pub struct Congestion {
     //Careful resume
     pub(crate) resume: own_resume::OwnResume,
     pub(crate) cr_metrics: own_resume::CRMetrics,
+
+    save_rtt: u64,
+    save_cwnd: usize,
 }
 
 impl Congestion {
@@ -199,6 +202,8 @@ impl Congestion {
                 trace_id,
                 initial_congestion_window,
             ),
+            save_rtt: u64::MAX,
+            save_cwnd: 1,
         };
 
         (cc.cc_ops.on_init)(&mut cc);
@@ -236,12 +241,33 @@ impl Congestion {
     fn update_app_limited(&mut self, v: bool) {
         self.app_limited = v;
     }
-    fn write_params_to_file(&mut self, rtt_stats: &RttStats) {
+
+    fn calculate_saved_params(&mut self, rtt_stats: &RttStats) {
+        //rtt as low as possible, cwnd as high as  possible
+        println!("-------CALCULATING SAVED PARAMS--------------");
+        println!("self saved_rtt is {:?}", self.resume.get_saved_rtt());
+        println!("compare rtt to {:?}", rtt_stats.rtt().as_secs());
+        println!("self cwnd is {:?}", self.resume.get_saved_cwnd());
+        println!("compare cwnd to {:?}", self.congestion_window);
+
+        if  self.resume.get_saved_rtt() >= rtt_stats.rtt().as_secs() {
+            self.save_rtt = rtt_stats.rtt().as_secs();
+        }
+        if self.resume.get_saved_cwnd() as usize > self.save_cwnd {
+            self.save_cwnd = self.congestion_window
+        }
+        println!("new save cwnd: {:?}", self.save_cwnd);
+        println!("new save rtt: {:?}", self.save_rtt);
+        println!("-----------------------");
+        self.write_params_to_file();
+    }
+    fn write_params_to_file(&mut self) {
         let mut file = File::create(SAVED_CC_FILE).unwrap();
         let mut save_string = "SAVED_RTT,".to_owned();
-        save_string.push_str(&rtt_stats.latest_rtt().as_millis().to_string());
+        save_string.push_str(&self.save_rtt.to_string());
         save_string.push_str(",SAVED_CWND,");
-        save_string.push_str(&self.congestion_window.to_string());
+        save_string.push_str(&self.save_cwnd.to_string());
+        println!("writing params: {}", save_string);
         let _ = file.write_all(save_string.as_bytes());
     }
 
@@ -325,7 +351,15 @@ impl Congestion {
             now,
             rtt_stats,
         );
-        self.write_params_to_file(rtt_stats);
+        match self.resume.get_state() {
+            own_resume::CrState::Normal => {
+                self.calculate_saved_params(rtt_stats);
+            },
+            own_resume::CrState::Reconnaissance => {
+                self.calculate_saved_params(rtt_stats);
+            },
+            _ => {},
+        }
     }
 
     fn schedule_next_packet(&mut self, now: Instant, packet_size: usize) {

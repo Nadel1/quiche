@@ -60,13 +60,13 @@ impl OwnResume {
         let mut saved_rtt = Duration::ZERO;
 
         let mut saved_cwnd = 0;
-        if Path::new(SAVED_CC_FILE).is_file() {
+        if Path::new(SAVED_CC_FILE).exists() {
             let file_contents = fs::read_to_string(file_name).unwrap();
             println!("info.txt content =\n{file_contents}");
             let file_array: Vec<&str> = file_contents.split(',').collect();
             let rtt_string = file_array[1];
-            if let Ok(rtt_int) = rtt_string.parse::<i128>() {
-                saved_rtt = Duration::from_millis(rtt_int.try_into().unwrap());
+            if let Ok(rtt_int) = rtt_string.parse::<u64>() {
+                saved_rtt = Duration::from_secs(rtt_int.try_into().unwrap());
                 println!("Found saved rtt! {:?}", saved_rtt);
             } else {
                 println!("Didnt find rtt");
@@ -82,31 +82,6 @@ impl OwnResume {
         } else {
             enabled = false;
         }
-
-        //if let Some(jw_oss) = std::env::var_os("SAVED_CWND_BYTES") {
-        //    println!("Found saved cwnd bytes!");
-        //    if let Ok(jw_string) = jw_oss.into_string() {
-        //        if let Ok(jw_int) = jw_string.parse::<usize>() {
-        //            saved_cwnd = jw_int;
-        //        }
-        //    }
-        //} else {
-        //    println!("Didnt find saved cwnd bytes!");
-        //    enabled = false;
-        //}
-
-        //if let Some(rtt_oss) = std::env::var_os("SAVED_RTT") {
-        //    if let Ok(rtt_string) = rtt_oss.into_string() {
-        //        if let Ok(rtt_int) = rtt_string.parse::<usize>() {
-        //            saved_rtt =
-        //                Duration::from_millis(rtt_int.try_into().unwrap());
-        //            println!("Found saved rtt! {:?}", saved_rtt);
-        //        }
-        //    }
-        //} else {
-        //    println!("Didnt find saved rtt!");
-        //    enabled = false;
-        //}
 
         Self {
             time_in_state: Instant::now(),
@@ -129,6 +104,7 @@ impl OwnResume {
         self.saved_cwnd = saved_cwnd;
         println!("{} careful resume configured", self.trace_id);
     }
+    
 
     pub fn enabled(&self) -> bool {
         println!("In enabled! cr state is {:?}", self.cr_state);
@@ -146,6 +122,11 @@ impl OwnResume {
     pub fn get_pipesize(&self) -> usize {
         self.pipesize
     }
+
+    pub fn get_saved_rtt(&self) ->u64{
+        self.saved_rtt.as_secs() as u64
+    }
+    
     pub fn get_saved_cwnd(&self) -> f64 {
         self.saved_cwnd as f64
     }
@@ -161,16 +142,6 @@ impl OwnResume {
     fn update_state_timer(&mut self) {
         self.time_in_state = Instant::now()
     }
-
-    fn write_to_file(&mut self) {
-        if Path::new(SAVED_CC_FILE).is_file() {
-            let _ = fs::remove_file(SAVED_CC_FILE);
-        }
-        let mut file = File::create_new(SAVED_CC_FILE).unwrap();
-        let mut save_string = "SAVED_RTT ".to_owned();
-        save_string.push_str(&self.saved_rtt.as_millis().to_string());
-        let _ = file.write_all(save_string.as_bytes());
-    }
     // Returns (new_cwnd, new_ssthresh), both optional
     pub fn process_ack(
         &mut self, largest_pkt_sent: u64, packet: &Acked, flightsize: usize,
@@ -185,6 +156,7 @@ impl OwnResume {
                     self.change_state(CrState::Unvalidated(largest_pkt_sent));
                     self.pipesize = flightsize; //initialise the pipesize to the flightsize
                     self.jump_cwnd = cmp::min(MAX_JUMP, self.saved_cwnd / 2);
+                    println!("---------------set the max jump_cwnd to {:?}-------------",self.jump_cwnd);
                     //cwnd=jump_cwnd ?how do i set this??
                 }
                 (None, None)
