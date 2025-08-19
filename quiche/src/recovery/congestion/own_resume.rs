@@ -104,15 +104,18 @@ impl OwnResume {
         self.saved_cwnd = saved_cwnd;
         println!("{} careful resume configured", self.trace_id);
     }
-    
 
-    pub fn enabled(&self) -> bool {
+    pub fn enabled(&mut self) -> bool {
         println!("In enabled! cr state is {:?}", self.cr_state);
         if self.enabled {
             println!("is enabled");
             self.cr_state != CrState::Normal
         } else {
             println!("not enabled");
+            if self.cr_state != CrState::Normal {
+                self.change_state(CrState::Normal);
+            }
+
             false
         }
     }
@@ -123,10 +126,10 @@ impl OwnResume {
         self.pipesize
     }
 
-    pub fn get_saved_rtt(&self) ->u64{
+    pub fn get_saved_rtt(&self) -> u64 {
         self.saved_rtt.as_secs() as u64
     }
-    
+
     pub fn get_saved_cwnd(&self) -> f64 {
         self.saved_cwnd as f64
     }

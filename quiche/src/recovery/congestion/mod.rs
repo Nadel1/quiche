@@ -245,28 +245,48 @@ impl Congestion {
     fn calculate_saved_params(&mut self, rtt_stats: &RttStats) {
         //rtt as low as possible, cwnd as high as  possible
         println!("-------CALCULATING SAVED PARAMS--------------");
-        println!("self saved_rtt is {:?}", self.resume.get_saved_rtt());
-        println!("compare rtt to {:?}", rtt_stats.rtt().as_secs());
-        println!("self cwnd is {:?}", self.resume.get_saved_cwnd());
-        println!("compare cwnd to {:?}", self.congestion_window);
+        let file_contents = fs::read_to_string(SAVED_CC_FILE).unwrap();
+        println!("info.txt content =\n{file_contents}");
+        let file_array: Vec<&str> = file_contents.split(',').collect();
+        let rtt_string = file_array[1];
+        let mut saved_cwnd = 0;
+        let mut saved_rtt = 0;
 
-        if  self.resume.get_saved_rtt() >= rtt_stats.rtt().as_secs() {
-            self.save_rtt = rtt_stats.rtt().as_secs();
+        if let Ok(rtt_int) = rtt_string.parse::<u64>() {
+            saved_rtt = rtt_int.try_into().unwrap();
+            println!("Found saved rtt! {:?}", saved_rtt);
+        } else {
+            println!("Didnt find rtt");
         }
-        if self.resume.get_saved_cwnd() as usize > self.save_cwnd {
-            self.save_cwnd = self.congestion_window
+
+        let cwnd_string = file_array[3];
+
+        if let Ok(cwnd_int) = cwnd_string.parse::<usize>() {
+            saved_cwnd = cwnd_int;
+            println!("Found saved cwnd! {:?}", saved_cwnd);
+        } else {
+            println!("Didnt find cwnd");
         }
-        println!("new save cwnd: {:?}", self.save_cwnd);
-        println!("new save rtt: {:?}", self.save_rtt);
-        println!("-----------------------");
-        self.write_params_to_file();
+
+        if saved_rtt > self.resume.get_saved_rtt() {
+            saved_rtt = self.resume.get_saved_rtt();
+        }
+        if saved_rtt > rtt_stats.rtt().as_secs() {
+            saved_rtt = rtt_stats.rtt().as_secs();
+        }
+
+        if saved_cwnd < self.congestion_window() {
+            saved_cwnd = self.congestion_window();
+        }
+
+        self.write_params_to_file(saved_rtt, saved_cwnd);
     }
-    fn write_params_to_file(&mut self) {
+    fn write_params_to_file(&mut self, saved_rtt: u64, saved_cwnd: usize) {
         let mut file = File::create(SAVED_CC_FILE).unwrap();
         let mut save_string = "SAVED_RTT,".to_owned();
-        save_string.push_str(&self.save_rtt.to_string());
+        save_string.push_str(&saved_rtt.to_string());
         save_string.push_str(",SAVED_CWND,");
-        save_string.push_str(&self.save_cwnd.to_string());
+        save_string.push_str(&saved_cwnd.to_string());
         println!("writing params: {}", save_string);
         let _ = file.write_all(save_string.as_bytes());
     }
