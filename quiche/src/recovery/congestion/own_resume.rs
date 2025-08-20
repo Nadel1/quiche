@@ -3,6 +3,7 @@
 use crate::recovery::congestion::Acked;
 use std::{
     cmp,
+    f64::consts::E,
     fs::{read_to_string, File},
     io::{Read, Write},
     time::{Duration, Instant},
@@ -64,20 +65,24 @@ impl OwnResume {
             let file_contents = fs::read_to_string(file_name).unwrap();
             println!("info.txt content =\n{file_contents}");
             let file_array: Vec<&str> = file_contents.split(',').collect();
-            let rtt_string = file_array[1];
-            if let Ok(rtt_int) = rtt_string.parse::<u64>() {
-                saved_rtt = Duration::from_secs(rtt_int.try_into().unwrap());
-                println!("Found saved rtt! {:?}", saved_rtt);
-            } else {
-                println!("Didnt find rtt");
-            }
+            if file_array.len() > 1 {
+                let rtt_string = file_array[1];
+                if let Ok(rtt_int) = rtt_string.parse::<u64>() {
+                    saved_rtt = Duration::from_secs(rtt_int.try_into().unwrap());
+                    println!("Found saved rtt! {:?}", saved_rtt);
+                } else {
+                    println!("Didnt find rtt");
+                }
 
-            let cwnd_string = file_array[3];
-            if let Ok(cwnd_int) = cwnd_string.parse::<usize>() {
-                saved_cwnd = cwnd_int;
-                println!("Found saved cwnd! {:?}", saved_cwnd);
+                let cwnd_string = file_array[3];
+                if let Ok(cwnd_int) = cwnd_string.parse::<usize>() {
+                    saved_cwnd = cwnd_int;
+                    println!("Found saved cwnd! {:?}", saved_cwnd);
+                } else {
+                    println!("Didnt find cwnd");
+                }
             } else {
-                println!("Didnt find cwnd");
+                enabled = false;
             }
         } else {
             enabled = false;
@@ -106,10 +111,11 @@ impl OwnResume {
     }
 
     pub fn enabled(&mut self) -> bool {
-        println!("In enabled! cr state is {:?}", self.cr_state);
         if self.enabled {
-            println!("is enabled");
+            println!("is enabled,state is {:?}", self.cr_state);
+
             self.cr_state != CrState::Normal
+            //true
         } else {
             println!("not enabled");
             if self.cr_state != CrState::Normal {
@@ -153,39 +159,26 @@ impl OwnResume {
         println!("in process ack!!");
         self.total_acked += packet.size;
         match self.cr_state {
-            CrState::Reconnaissance => {
-                if iw_acked {
-                    self.update_state_timer();
-                    self.change_state(CrState::Unvalidated(largest_pkt_sent));
-                    self.pipesize = flightsize; //initialise the pipesize to the flightsize
-                    self.jump_cwnd = cmp::min(MAX_JUMP, self.saved_cwnd / 2);
-                    println!("---------------set the max jump_cwnd to {:?}-------------",self.jump_cwnd);
-                    //cwnd=jump_cwnd ?how do i set this??
-                }
-                (None, None)
-            },
             CrState::Unvalidated(first_packet) => {
-                println!("in unvalidated phase!");
-                //check that we leave unvalidated phase after 1 rtt
-                let now = Instant::now();
-                if now - self.time_in_state > self.saved_rtt {
-                    self.change_state(CrState::Validating(largest_pkt_sent));
-                }
                 self.pipesize += packet.size;
-
                 if packet.pkt_num >= first_packet {
                     if flightsize <= self.pipesize {
-                        println!("{} careful resume complete", self.trace_id);
-                        self.change_state(CrState::Normal);
+                        trace!("{} careful resume complete", self.trace_id);
+                        self.change_state(
+                            CrState::Normal,
+                            // CarefulResumeTrigger::LastUnvalidatedPacketAcknowledged,
+                        );
                         (Some(self.pipesize), None)
                     } else {
-                        //received ack for unvalidated packet
-                        println!(
+                        trace!(
                             "{} entering careful resume validating phase",
                             self.trace_id
                         );
                         // Store the last packet number that was sent in the Unvalidated Phase
-                        self.change_state(CrState::Validating(largest_pkt_sent));
+                        self.change_state(
+                            CrState::Validating(largest_pkt_sent),
+                            // CarefulResumeTrigger::FirstUnvalidatedPacketAcknowledged,
+                        );
                         (Some(flightsize), None)
                     }
                 } else {
@@ -193,19 +186,23 @@ impl OwnResume {
                 }
             },
             CrState::Validating(last_packet) => {
-                println!("in validating phase!");
                 self.pipesize += packet.size;
                 if packet.pkt_num >= last_packet {
-                    println!("{} careful resume complete", self.trace_id);
-                    self.change_state(CrState::Normal);
+                    trace!("{} careful resume complete", self.trace_id);
+                    self.change_state(
+                        CrState::Normal,
+                        //CarefulResumeTrigger::LastUnvalidatedPacketAcknowledged,
+                    );
                 }
                 (None, None)
             },
             CrState::SafeRetreat(last_packet) => {
-                println!("in safe retreat phase!");
                 if packet.pkt_num >= last_packet {
-                    println!("{} careful resume complete", self.trace_id);
-                    self.change_state(CrState::Normal);
+                    trace!("{} careful resume complete", self.trace_id);
+                    self.change_state(
+                        CrState::Normal,
+                        //CarefulResumeTrigger::ExitRecovery,
+                    );
                     (None, Some(self.pipesize))
                 } else {
                     self.pipesize += packet.size;
@@ -256,8 +253,8 @@ impl OwnResume {
                     self.trace_id, current_rtt, self.saved_rtt
                 );
                     self.change_state(CrState::Normal);
-                    return cwnd;
                 }
+                return cwnd;
             },
             CrState::Unvalidated(_) => {
                 return self.get_jump_cwnd(); //sets the cwnd to jump cwnd
@@ -267,48 +264,6 @@ impl OwnResume {
             },
             _ => return cwnd,
         }
-        //else if  self.cr_state == CrState::Reconnaissance {//meaning iw is acked and we are in the recon phase --> go to unvalidated phase
-        //    println!("-----Set jump in send_packet in resume-----");
-        //    let jump = (self.saved_cwnd / 2).saturating_sub(cwnd);// this should be done on entry to unvalidated phase
-        //
-        //    if jump == 0 {
-        //        self.change_state(CrState::Normal);
-        //        return 0;
-        //    }
-        //
-        //    let current_rtt = match rtt_sample {
-        //        Some(s) => s,
-        //        None => {
-        //            // Don't make any decisions until we have an RTT sample
-        //            return 0;
-        //        },
-        //    };
-        //
-        //    // Confirm RTT is similar to that of the saved connection
-        //    if current_rtt <= self.saved_rtt / 2
-        //        || current_rtt >= self.saved_rtt * 10
-        //    {
-        //        println!(
-        //            "{} current RTT too divergent from saved RTT - not using careful resume; \
-        //            rtt_sample={:?} saved_rtt={:?}",
-        //            self.trace_id, current_rtt, self.saved_rtt
-        //        );
-        //        self.change_state(CrState::Normal);
-        //        return 0;
-        //    }
-        //
-        //    // Store the first packet number that was sent in the Unvalidated Phase
-        //    println!(
-        //        "{} entering careful resume unvalidated phase",
-        //        self.trace_id
-        //    );
-        //    self.change_state(CrState::Unvalidated(largest_pkt_sent));
-        //    self.pipesize = cwnd;
-        //    // we return the jump in window, CC code handles the increase in cwnd
-        //    //return jump;
-        //}
-
-        0
     }
 
     pub fn congestion_event(&mut self, largest_pkt_sent: u64) -> usize {

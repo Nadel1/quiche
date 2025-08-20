@@ -135,7 +135,7 @@ pub struct Congestion {
     max_datagram_size: usize,
 
     pub(crate) lost_count: usize,
-
+    initial_congestion_window: usize,
     //Careful resume
     pub(crate) resume: own_resume::OwnResume,
     pub(crate) cr_metrics: own_resume::CRMetrics,
@@ -152,6 +152,7 @@ impl Congestion {
             * recovery_config.initial_congestion_window_packets;
 
         let mut cc = Congestion {
+            initial_congestion_window,
             congestion_window: initial_congestion_window,
 
             ssthresh: Default::default(),
@@ -245,43 +246,45 @@ impl Congestion {
     fn calculate_saved_params(&mut self, rtt_stats: &RttStats) {
         //rtt as low as possible, cwnd as high as  possible
         println!("-------CALCULATING SAVED PARAMS--------------");
-        let file_contents = fs::read_to_string(SAVED_CC_FILE).unwrap();
-        println!("info.txt content =\n{file_contents}");
-        let file_array: Vec<&str> = file_contents.split(',').collect();
-        let rtt_string = file_array[1];
-        let mut saved_cwnd = 0;
-        let mut saved_rtt = 0;
+        if Path::new(SAVED_CC_FILE).exists() {
+            //let file_contents = fs::read_to_string(SAVED_CC_FILE).unwrap();
+            //println!("info.txt content =\n{file_contents}");
+            //let file_array: Vec<&str> = file_contents.split(',').collect();
+            //let rtt_string = file_array[1];
+            let mut saved_cwnd = self.resume.get_saved_cwnd();
+            let mut saved_rtt = self.resume.get_saved_rtt();
 
-        if let Ok(rtt_int) = rtt_string.parse::<u64>() {
-            saved_rtt = rtt_int.try_into().unwrap();
-            println!("Found saved rtt! {:?}", saved_rtt);
+            //if let Ok(rtt_int) = rtt_string.parse::<u64>() {
+            //    saved_rtt = rtt_int.try_into().unwrap();
+            //    println!("Found saved rtt! {:?}", saved_rtt);
+            //} else {
+            //    println!("Didnt find rtt");
+            //}
+            //
+            //let cwnd_string = file_array[3];
+            //
+            //if let Ok(cwnd_int) = cwnd_string.parse::<usize>() {
+            //    saved_cwnd = cwnd_int;
+            //    println!("Found saved cwnd! {:?}", saved_cwnd);
+            //} else {
+            //    println!("Didnt find cwnd");
+            //}
+            if saved_rtt > rtt_stats.rtt().as_secs() {
+                saved_rtt = rtt_stats.smoothed_rtt.as_secs();
+            }
+
+            if saved_cwnd < self.delivery_rate.delivered() as f64 {
+                saved_cwnd = self.delivery_rate.delivered() as f64;
+            }
+            if saved_cwnd > (4 * self.initial_congestion_window) as f64 {
+                self.write_params_to_file(saved_rtt, saved_cwnd as usize);
+            }
         } else {
-            println!("Didnt find rtt");
+            File::create(SAVED_CC_FILE).unwrap();
         }
-
-        let cwnd_string = file_array[3];
-
-        if let Ok(cwnd_int) = cwnd_string.parse::<usize>() {
-            saved_cwnd = cwnd_int;
-            println!("Found saved cwnd! {:?}", saved_cwnd);
-        } else {
-            println!("Didnt find cwnd");
-        }
-
-        if saved_rtt > self.resume.get_saved_rtt() {
-            saved_rtt = self.resume.get_saved_rtt();
-        }
-        if saved_rtt > rtt_stats.rtt().as_secs() {
-            saved_rtt = rtt_stats.rtt().as_secs();
-        }
-
-        if saved_cwnd < self.congestion_window() {
-            saved_cwnd = self.congestion_window();
-        }
-
-        self.write_params_to_file(saved_rtt, saved_cwnd);
     }
     fn write_params_to_file(&mut self, saved_rtt: u64, saved_cwnd: usize) {
+        println!("writing rtt to file {:?}", saved_rtt);
         let mut file = File::create(SAVED_CC_FILE).unwrap();
         let mut save_string = "SAVED_RTT,".to_owned();
         save_string.push_str(&saved_rtt.to_string());
@@ -323,6 +326,14 @@ impl Congestion {
                     let rate = PACING_MULTIPLIER * self.congestion_window as f64
                         / rtt_stats.smoothed_rtt.as_secs_f64();
                     self.set_pacing_rate(rate as u64, now);
+                    println!(
+                        "-------------Current cwnd is {:?}-------------",
+                        self.congestion_window
+                    );
+                    println!(
+                        "-----------Set pacing in normal rate to: {:}-----------",
+                        rate
+                    );
                 }
             },
             own_resume::CrState::Unvalidated(_) => {
@@ -330,11 +341,14 @@ impl Congestion {
                     && rtt_stats.has_first_rtt_sample
                 {
                     //see page 19 of https://datatracker.ietf.org/doc/draft-ietf-tsvwg-careful-resume/
-                    let inter_transmission_time: u64 =
-                        (rtt_stats.latest_rtt().as_secs()
-                            * self.max_datagram_size as u64)
-                            / self.resume.get_jump_cwnd() as u64;
-                    self.set_pacing_rate(inter_transmission_time, now);
+                    let inter_transmission_time: f64 =
+                        (rtt_stats.smoothed_rtt.as_secs_f64()
+                            * self.max_datagram_size as f64)
+                            / self.resume.get_jump_cwnd() as f64;
+
+                    self.set_pacing_rate(inter_transmission_time as u64, now);
+
+                    println!("-----------------Set pacing in unvalidated to rate to: {:}---------------", inter_transmission_time);
                 }
             },
             _ => {},
@@ -373,9 +387,6 @@ impl Congestion {
         );
         match self.resume.get_state() {
             own_resume::CrState::Normal => {
-                self.calculate_saved_params(rtt_stats);
-            },
-            own_resume::CrState::Reconnaissance => {
                 self.calculate_saved_params(rtt_stats);
             },
             _ => {},
