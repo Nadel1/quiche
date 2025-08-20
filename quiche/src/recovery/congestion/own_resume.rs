@@ -166,7 +166,7 @@ impl OwnResume {
                         trace!("{} careful resume complete", self.trace_id);
                         self.change_state(
                             CrState::Normal,
-                            // CarefulResumeTrigger::LastUnvalidatedPacketAcknowledged,
+                           // CarefulResumeTrigger::LastUnvalidatedPacketAcknowledged,
                         );
                         (Some(self.pipesize), None)
                     } else {
@@ -177,7 +177,7 @@ impl OwnResume {
                         // Store the last packet number that was sent in the Unvalidated Phase
                         self.change_state(
                             CrState::Validating(largest_pkt_sent),
-                            // CarefulResumeTrigger::FirstUnvalidatedPacketAcknowledged,
+                           // CarefulResumeTrigger::FirstUnvalidatedPacketAcknowledged,
                         );
                         (Some(flightsize), None)
                     }
@@ -216,7 +216,7 @@ impl OwnResume {
     //returns cwnd
     pub fn send_packet(
         &mut self, rtt_sample: Option<Duration>, cwnd: usize,
-        _largest_pkt_sent: u64, app_limited: bool, iw_acked: bool,
+        largest_pkt_sent: u64, app_limited: bool, iw_acked: bool,
     ) -> usize {
         println!(
             "in send packet!! app limited is {}, iw_acked is {}",
@@ -227,13 +227,19 @@ impl OwnResume {
         // Do nothing when data limited to avoid having insufficient data
         // to be able to validate transmission at a higher rate
         if app_limited {
-            return self.saved_cwnd;
+            return 0;//self.saved_cwnd;
         }
         if !iw_acked {
-            return self.saved_cwnd;
+            return 0;//self.saved_cwnd;
         }
         match self.cr_state {
             CrState::Reconnaissance => {
+                //self.jump_cwnd = (self.saved_cwnd / 2).saturating_sub(cwnd);
+                self.jump_cwnd=cmp::min(MAX_JUMP, self.saved_cwnd / 2);//--> this _would_ be correct following the draft, but it adds roughly 5s to flow completion?
+                if self.jump_cwnd==0{
+                    self.change_state(CrState::Normal);
+                    return 0;
+                }
                 //check rtt in recon: path changed or rtt too small?
                 let current_rtt = match rtt_sample {
                     Some(s) => s,
@@ -254,15 +260,12 @@ impl OwnResume {
                 );
                     self.change_state(CrState::Normal);
                 }
-                return cwnd;
+                self.change_state(CrState::Unvalidated(largest_pkt_sent));
+                self.pipesize=cwnd;
+                return self.jump_cwnd;
             },
-            CrState::Unvalidated(_) => {
-                return self.get_jump_cwnd(); //sets the cwnd to jump cwnd
-            },
-            CrState::SafeRetreat(_) => {
-                return self.get_pipesize() / 2;
-            },
-            _ => return cwnd,
+        
+            _ => return 0,
         }
     }
 
