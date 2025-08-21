@@ -196,6 +196,12 @@ pub struct State {
 
     // bytes_in_flight before processing this ACK.
     prior_bytes_in_flight: usize,
+
+    // indicates whether or not cr is used
+    carefully_resuming: bool,
+
+    // reset carefully_resuming to false, 2 rounds after it started
+    careful_resume_rounds: u64,
 }
 
 impl State {
@@ -258,6 +264,10 @@ impl State {
             newly_acked_bytes: 0,
 
             prior_bytes_in_flight: 0,
+
+            carefully_resuming: false,
+
+            careful_resume_rounds: 0,
         }
     }
 }
@@ -332,7 +342,10 @@ fn congestion_event(
     largest_lost_pkt: &Sent, now: Instant,
 ) {
     r.bbr_state.newly_lost_bytes = lost_bytes;
-
+    if r.bbr_state.carefully_resuming{
+        println!("---------congestion event in mod.rs detected, switching to drain state!!!------------");
+        r.bbr_state.state=BBRStateMachine::Drain;
+    }
     // Upon entering Fast Recovery.
     if !r.in_congestion_recovery(largest_lost_pkt.time_sent) {
         // Upon entering Fast Recovery.

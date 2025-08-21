@@ -6,7 +6,7 @@ use std::{
     f64::consts::E,
     fs::{read_to_string, File},
     io::{Read, Write},
-    time::{Duration, Instant},
+    time::{Duration, Instant}, u64,
 };
 //write back saved cc params to file
 use std::fs;
@@ -58,7 +58,7 @@ impl OwnResume {
     pub fn new(trace_id: &str, file_name: &str) -> Self {
         // enabled will become false if either of the required CR ENV VARS is not supplied
         let mut enabled = true;
-        let mut saved_rtt = Duration::ZERO;
+        let mut saved_rtt = Duration::from_secs(u64::MAX);
 
         let mut saved_cwnd = 0;
         if Path::new(SAVED_CC_FILE).exists() {
