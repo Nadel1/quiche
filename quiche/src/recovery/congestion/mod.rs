@@ -270,7 +270,7 @@ impl Congestion {
         save_string.push_str(&saved_rtt.to_string());
         save_string.push_str(",SAVED_CWND,");
         save_string.push_str(&saved_cwnd.to_string());
-
+        println!("Saving: {}",save_string);
         let _ = file.write_all(save_string.as_bytes());
     }
 

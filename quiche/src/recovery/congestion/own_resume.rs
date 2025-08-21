@@ -67,7 +67,8 @@ impl OwnResume {
             if file_array.len() > 1 {
                 let rtt_string = file_array[1];
                 if let Ok(rtt_int) = rtt_string.parse::<u64>() {
-                    saved_rtt = Duration::from_secs(rtt_int.try_into().unwrap());
+                    saved_rtt =
+                        Duration::from_secs(rtt_int.try_into().unwrap());
                     println!("Found saved rtt! {:?}", saved_rtt);
                 } else {
                     println!("Didnt find rtt");
@@ -92,7 +93,7 @@ impl OwnResume {
             trace_id: trace_id.to_string(),
             enabled,
             cr_state: CrState::default(),
-            saved_rtt: Duration::from_secs(u64::MAX),
+            saved_rtt,
             saved_cwnd,
             jump_cwnd: 0,
             pipesize: 0,
