@@ -245,30 +245,11 @@ impl Congestion {
 
     fn calculate_saved_params(&mut self, rtt_stats: &RttStats) {
         //rtt as low as possible, cwnd as high as  possible
-        println!("-------CALCULATING SAVED PARAMS--------------");
+
         if Path::new(SAVED_CC_FILE).exists() {
-            //let file_contents = fs::read_to_string(SAVED_CC_FILE).unwrap();
-            //println!("info.txt content =\n{file_contents}");
-            //let file_array: Vec<&str> = file_contents.split(',').collect();
-            //let rtt_string = file_array[1];
             let mut saved_cwnd = self.resume.get_saved_cwnd();
             let mut saved_rtt = self.resume.get_saved_rtt();
 
-            //if let Ok(rtt_int) = rtt_string.parse::<u64>() {
-            //    saved_rtt = rtt_int.try_into().unwrap();
-            //    println!("Found saved rtt! {:?}", saved_rtt);
-            //} else {
-            //    println!("Didnt find rtt");
-            //}
-            //
-            //let cwnd_string = file_array[3];
-            //
-            //if let Ok(cwnd_int) = cwnd_string.parse::<usize>() {
-            //    saved_cwnd = cwnd_int;
-            //    println!("Found saved cwnd! {:?}", saved_cwnd);
-            //} else {
-            //    println!("Didnt find cwnd");
-            //}
             if saved_rtt > rtt_stats.rtt().as_secs() {
                 saved_rtt = rtt_stats.smoothed_rtt.as_secs();
             }
@@ -284,13 +265,12 @@ impl Congestion {
         }
     }
     fn write_params_to_file(&mut self, saved_rtt: u64, saved_cwnd: usize) {
-        println!("writing rtt to file {:?}", saved_rtt);
         let mut file = File::create(SAVED_CC_FILE).unwrap();
         let mut save_string = "SAVED_RTT,".to_owned();
         save_string.push_str(&saved_rtt.to_string());
         save_string.push_str(",SAVED_CWND,");
         save_string.push_str(&saved_cwnd.to_string());
-        println!("writing params: {}", save_string);
+
         let _ = file.write_all(save_string.as_bytes());
     }
 
@@ -326,14 +306,6 @@ impl Congestion {
                     let rate = PACING_MULTIPLIER * self.congestion_window as f64
                         / rtt_stats.smoothed_rtt.as_secs_f64();
                     self.set_pacing_rate(rate as u64, now);
-                    println!(
-                        "-------------Current cwnd is {:?}-------------",
-                        self.congestion_window
-                    );
-                    println!(
-                        "-----------Set pacing in normal rate to: {:}-----------",
-                        rate
-                    );
                 }
             },
             own_resume::CrState::Unvalidated(_) => {
@@ -347,8 +319,6 @@ impl Congestion {
                             / self.resume.get_jump_cwnd() as f64;
 
                     self.set_pacing_rate(inter_transmission_time as u64, now);
-
-                    println!("-----------------Set pacing in unvalidated to rate to: {:}---------------", inter_transmission_time);
                 }
             },
             _ => {},
