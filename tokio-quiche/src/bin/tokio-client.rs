@@ -99,10 +99,10 @@ async fn main() -> tokio_quiche::QuicResult<()> {
                                     "fin" => fin,
                                     "len" => pooled.len()
                                 );
-                                println!(
-                                    "{}",
-                                    std::str::from_utf8(&pooled).unwrap()
-                                );
+                                //println!(
+                                //    "{}",
+                                //    std::str::from_utf8(&pooled).unwrap()
+                                //);
                                 if fin {
                                     println!("received full body, exiting");
                                     break 'body;

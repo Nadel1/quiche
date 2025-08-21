@@ -96,7 +96,29 @@ fn bbr_update_round(r: &mut Congestion, packet: &Acked) {
     if packet.delivered >= bbr.next_round_delivered {
         bbr.next_round_delivered = r.delivery_rate.delivered();
         bbr.round_count += 1;
+
+        // set carefully resuming back to false after it has been set to true for two rounds
+        if bbr.carefully_resuming
+            && bbr.round_count - bbr.careful_resume_rounds > 5
+        {
+            bbr.carefully_resuming = false;
+        }
         bbr.round_start = true;
+        if r.resume.enabled() {
+            println!("--------resume is enabled, set up new cwnd-----------");
+            // start unvalidated state at the start of a new round
+            //r.resume.change_state(CrState::Unvalidated(packet.pkt_num));
+            //set carefully resuming to true
+            bbr.carefully_resuming = true;
+            //set pacing rate
+            bbr.pacing_rate =
+                cmp::max(bbr.btlbw * bbr.pacing_rate, bbr.pacing_rate);
+            let new_cwnd = cmp::max(bbr.btlbw, bbr.pacing_rate) as usize
+                * bbr.rtprop.as_secs() as usize
+                * bbr.cwnd_gain as usize;
+            r.congestion_window = new_cwnd;
+            bbr.careful_resume_rounds = bbr.round_count;
+        }
         bbr.packet_conservation = false;
     } else {
         bbr.round_start = false;
@@ -204,7 +226,7 @@ fn bbr_set_cwnd(r: &mut Congestion, bytes_in_flight: usize) {
                 < r.max_datagram_size * r.initial_congestion_window_packets
         {
             if r.resume.enabled() {
-                println!("------------Careful resume is enabled in bbr!!!------------");
+                println!("------------Careful resume is enabled!!!------------");
                 let cr_state = r.resume.get_state();
                 match cr_state {
                     CrState::Unvalidated(_) => {},
@@ -215,10 +237,11 @@ fn bbr_set_cwnd(r: &mut Congestion, bytes_in_flight: usize) {
                 }
             } else {
                 println!(
-                    "------------Careful resume is not enabled in bbr!!!------------"
+                    "------------Careful resume is not enabled!!!------------"
                 );
                 r.congestion_window += acked_bytes;
             }
+
         }
 
         r.congestion_window = r.congestion_window.max(bbr_min_pipe_cwnd(r))
@@ -260,6 +283,11 @@ fn bbr_enter_drain(r: &mut Congestion) {
     let bbr = &mut r.bbr_state;
 
     bbr.state = BBRStateMachine::Drain;
+
+    //entered drain phase while carefully_resuming set to true
+    if bbr.carefully_resuming {
+        r.resume.change_state(CrState::SafeRetreat(0));
+    }
 
     // pace slowly
     bbr.pacing_gain = 1.0 / BBR_HIGH_GAIN;
