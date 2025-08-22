@@ -576,10 +576,10 @@ fn bbr2_update_round(r: &mut Congestion, packet: &Acked) {
             //set carefully resuming to true
             r.bbr2_state.carefully_resuming = true;
             //set pacing rate
-            r.bbr2_state.pacing_rate = cmp::max(
-                r.bbr2_state.bw * r.bbr2_state.pacing_gain as u64,
-                r.bbr2_state.probe_rtt_min_delay.as_secs(),
-            );
+            //r.bbr2_state.pacing_rate = cmp::max(
+            //    r.bbr2_state.bw * r.bbr2_state.pacing_gain as u64,
+            //    r.bbr2_state.probe_rtt_min_delay.as_secs(),
+            //);
             let new_cwnd = cmp::max(
                 r.bbr2_state.bw,
                 r.bbr2_state.probe_rtt_min_delay.as_secs()
