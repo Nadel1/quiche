@@ -482,7 +482,10 @@ impl GRecovery {
 
         Some(Self {
             epochs: Default::default(),
-            rtt_stats: RttStats::new(recovery_config.initial_rtt, recovery_config.max_ack_delay),
+            rtt_stats: RttStats::new(
+                recovery_config.initial_rtt,
+                recovery_config.max_ack_delay,
+            ),
             loss_timer: Default::default(),
             pto_count: 0,
 
@@ -514,6 +517,7 @@ impl GRecovery {
 
             newly_acked: Vec::new(),
             lost_reuse: Vec::new(),
+            recovery_stats: RecoveryStats::default(),
         })
     }
 
@@ -620,8 +624,8 @@ impl GRecovery {
             return;
         }
 
-        if self.bytes_in_flight.is_zero() &&
-            handshake_status.peer_verified_address
+        if self.bytes_in_flight.is_zero()
+            && handshake_status.peer_verified_address
         {
             self.loss_timer.clear();
             return;
@@ -645,9 +649,9 @@ impl RecoveryOps for GRecovery {
     }
 
     fn should_elicit_ack(&self, epoch: packet::Epoch) -> bool {
-        self.epochs[epoch].loss_probes > 0 ||
-            self.outstanding_non_ack_eliciting >=
-                MAX_OUTSTANDING_NON_ACK_ELICITING
+        self.epochs[epoch].loss_probes > 0
+            || self.outstanding_non_ack_eliciting
+                >= MAX_OUTSTANDING_NON_ACK_ELICITING
     }
 
     fn get_acked_frames(&mut self, epoch: packet::Epoch) -> Vec<frame::Frame> {
@@ -794,8 +798,8 @@ impl RecoveryOps for GRecovery {
         self.epochs[epoch].largest_acked_packet = Some(largest_acked_pkt_num);
 
         // Check if largest packet is newly acked.
-        let update_rtt = largest_newly_acked.pkt_num == largest_acked_pkt_num &&
-            has_ack_eliciting;
+        let update_rtt = largest_newly_acked.pkt_num == largest_acked_pkt_num
+            && has_ack_eliciting;
         if update_rtt {
             let latest_rtt = now - largest_newly_acked.time_sent;
             self.rtt_stats.update_rtt(
