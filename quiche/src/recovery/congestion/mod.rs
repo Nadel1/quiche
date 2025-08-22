@@ -28,7 +28,7 @@ use debug_panic::debug_panic;
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use std::{fs, u64};
 
 use self::recovery::Acked;
@@ -270,7 +270,11 @@ impl Congestion {
         save_string.push_str(&saved_rtt.to_string());
         save_string.push_str(",SAVED_CWND,");
         save_string.push_str(&saved_cwnd.to_string());
-        println!("Saving: {}",save_string);
+        save_string.push_str(",timestamp,");
+        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH);
+        save_string.push_str(&timestamp.unwrap().as_secs().to_string());
+
+        println!("Saving: {}", save_string);
         let _ = file.write_all(save_string.as_bytes());
     }
 
