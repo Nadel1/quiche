@@ -26,7 +26,6 @@
 
 use std::time::Duration;
 use super::common::alpns;
-use std::time::Duration;
 
 pub trait Args {
     fn with_docopt(docopt: &docopt::Docopt) -> Self;

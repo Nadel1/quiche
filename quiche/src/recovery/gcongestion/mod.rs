@@ -37,6 +37,7 @@ pub use self::recovery::GRecovery;
 use crate::recovery::bandwidth::Bandwidth;
 
 use crate::recovery::rtt::RttStats;
+use crate::recovery::RecoveryStats;
 use crate::recovery::RecoveryConfig;
 
 #[derive(Debug)]

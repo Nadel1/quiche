@@ -36,6 +36,8 @@ use super::Sent;
 
 use crate::packet::Epoch;
 use crate::ranges::RangeSet;
+use crate::recovery::congestion::hystart;
+use crate::recovery::congestion::SsThresh;
 use crate::recovery::Bandwidth;
 use crate::recovery::HandshakeStatus;
 use crate::recovery::OnLossDetectionTimeoutOutcome;
@@ -525,7 +527,8 @@ impl LegacyRecovery {
                 now,
             );
 
-            self.bytes_in_flight -= loss.lost_bytes;
+            self.bytes_in_flight
+                .saturating_subtract(loss.lost_bytes, now);
 
             if self.congestion.resume.enabled() {
                 let largest_sent_pkt = self.epochs[epoch]
@@ -756,14 +759,16 @@ impl RecoveryOps for LegacyRecovery {
                     self.congestion.resume.process_ack(
                         largest_sent_pkt,
                         packet,
-                        self.bytes_in_flight,
+                        self.bytes_in_flight.get(),
                         iw_acked,
                     );
                 if let Some(new_cwnd) = new_cwnd {
                     self.congestion.congestion_window = new_cwnd;
                 }
                 if let Some(new_ssthresh) = new_ssthresh {
-                    self.congestion.ssthresh = new_ssthresh;
+                    let mut new_thresh=SsThresh::default();
+                    new_thresh.update(new_ssthresh, false);//css: would be relevant for hystart, not used outside of it, assume it to be false
+                    self.congestion.ssthresh = new_thresh;
                 }
             }
         }

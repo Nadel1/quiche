@@ -421,7 +421,6 @@ pub fn connect(
             h_conn.send_requests(&mut conn, &args.dump_response_path);
             h_conn.handle_responses(&mut conn, &mut buf, &app_data_start);
         }
-<<<<<<< HEAD
 
         // Handle path events.
         while let Some(qe) = conn.path_event_next() {
@@ -470,224 +469,6 @@ pub fn connect(
             if conn.new_scid(&scid, reset_token, false).is_err() {
                 break;
             }
-=======
->>>>>>> 2784b022 (debug default transport param)
-
-        // Handle path events.
-        while let Some(qe) = conn.path_event_next() {
-            match qe {
-                quiche::PathEvent::New(..) => unreachable!(),
-
-<<<<<<< HEAD
-                    quiche::PathEvent::Validated(local_addr, peer_addr) => {
-                        info!(
-                            "Path ({}, {}) is now validated",
-                            local_addr, peer_addr
-                        );
-                        conn.migrate(local_addr, peer_addr).unwrap();
-                        migrated = true;
-                    },
-
-                    quiche::PathEvent::FailedValidation(
-                        local_addr,
-                        peer_addr,
-                    ) => {
-                        info!(
-                            "Path ({}, {}) failed validation",
-                            local_addr, peer_addr
-                        );
-                    },
-
-                    quiche::PathEvent::Closed(local_addr, peer_addr) => {
-                        info!(
-                            "Path ({}, {}) is now closed and unusable",
-                            local_addr, peer_addr
-                        );
-                    },
-
-                    quiche::PathEvent::ReusedSourceConnectionId(
-                        cid_seq,
-                        old,
-                        new,
-                    ) => {
-                        info!(
-                            "Peer reused cid seq {} (initially {:?}) on {:?}",
-                            cid_seq, old, new
-                        );
-                    },
-
-                    quiche::PathEvent::PeerMigrated(..) => unreachable!(),
-                }
-            }
-
-<<<<<<< HEAD
-                        Err(quiche::Error::Done) => {
-                            trace!("{local_addr} -> {peer_addr}: done writing");
-                            break;
-                        },
-
-                        Err(e) => {
-                            error!(
-                                "{local_addr} -> {peer_addr}: send failed: {e:?}"
-                            );
-=======
-            // See whether source Connection IDs have been retired.
-            while let Some(retired_scid) = conn.retired_scid_next() {
-                info!("Retiring source CID {:?}", retired_scid);
-            }
-
-            // Provides as many CIDs as possible.
-            while conn.scids_left() > 0 {
-                let (scid, reset_token) = generate_cid_and_reset_token(&rng);
->>>>>>> f6a68758 (work on making quiche send multiple requests)
-
-                if conn.new_scid(&scid, reset_token, false).is_err() {
-                    break;
-                }
-
-                scid_sent = true;
-            }
-
-            if args.perform_migration
-                && !new_path_probed
-                && scid_sent
-                && conn.available_dcids() > 0
-            {
-                let additional_local_addr =
-                    migrate_socket.as_ref().unwrap().local_addr().unwrap();
-                conn.probe_path(additional_local_addr, peer_addr).unwrap();
-
-                new_path_probed = true;
-            }
-
-            // Generate outgoing QUIC packets and send them on the UDP socket, until
-            // quiche reports that there are no more packets to be sent.
-            let mut sockets = vec![&socket];
-            if let Some(migrate_socket) = migrate_socket.as_ref() {
-                sockets.push(migrate_socket);
-            }
-
-            for socket in sockets {
-                let local_addr = socket.local_addr().unwrap();
-
-                for peer_addr in conn.paths_iter(local_addr) {
-                    loop {
-                        let (write, send_info) = match conn.send_on_path(
-                            &mut out,
-                            Some(local_addr),
-                            Some(peer_addr),
-                        ) {
-                            Ok(v) => v,
-
-                            Err(quiche::Error::Done) => {
-                                trace!(
-                                    "{} -> {}: done writing",
-                                    local_addr,
-                                    peer_addr
-                                );
-                                break;
-                            },
-
-                            Err(e) => {
-                                error!(
-                                    "{} -> {}: send failed: {:?}",
-                                    local_addr, peer_addr, e
-                                );
-
-                                conn.close(false, 0x1, b"fail").ok();
-                                break;
-                            },
-                        };
-
-                        if let Err(e) =
-                            socket.send_to(&out[..write], send_info.to)
-                        {
-                            if e.kind() == std::io::ErrorKind::WouldBlock {
-                                trace!(
-                                    "{} -> {}: send() would block",
-                                    local_addr,
-                                    send_info.to
-                                );
-                                break;
-                            }
-
-                            return Err(ClientError::Other(format!(
-                                "{} -> {}: send() failed: {:?}",
-                                local_addr, send_info.to, e
-                            )));
-                        }
-
-                        trace!(
-                            "written {write} bytes from {local_addr} to {}",
-                            send_info.to
-                        );
-                    }
-                }
-            }
-
-            if conn.is_closed() {
-                info!(
-                    "connection closed, {:?} {:?}",
-                    conn.stats(),
-                    conn.path_stats().collect::<Vec<quiche::PathStats>>()
-                );
-
-                if !conn.is_established() {
-                    error!(
-                        "connection timed out after {:?}",
-                        app_data_start.elapsed(),
-=======
-                quiche::PathEvent::Validated(local_addr, peer_addr) => {
-                    info!(
-                        "Path ({}, {}) is now validated",
-                        local_addr, peer_addr
->>>>>>> 2784b022 (debug default transport param)
-                    );
-                    conn.migrate(local_addr, peer_addr).unwrap();
-                    migrated = true;
-                },
-
-                quiche::PathEvent::FailedValidation(local_addr, peer_addr) => {
-                    info!(
-                        "Path ({}, {}) failed validation",
-                        local_addr, peer_addr
-                    );
-                },
-
-                quiche::PathEvent::Closed(local_addr, peer_addr) => {
-                    info!(
-                        "Path ({}, {}) is now closed and unusable",
-                        local_addr, peer_addr
-                    );
-                },
-
-                quiche::PathEvent::ReusedSourceConnectionId(
-                    cid_seq,
-                    old,
-                    new,
-                ) => {
-                    info!(
-                        "Peer reused cid seq {} (initially {:?}) on {:?}",
-                        cid_seq, old, new
-                    );
-                },
-
-                quiche::PathEvent::PeerMigrated(..) => unreachable!(),
-            }
-        }
-
-        // See whether source Connection IDs have been retired.
-        while let Some(retired_scid) = conn.retired_scid_next() {
-            info!("Retiring source CID {:?}", retired_scid);
-        }
-
-        // Provides as many CIDs as possible.
-        while conn.scids_left() > 0 {
-            let (scid, reset_token) = generate_cid_and_reset_token(&rng);
-
-            if conn.new_scid(&scid, reset_token, false).is_err() {
-                break;
-            }
 
             scid_sent = true;
         }
@@ -724,18 +505,13 @@ pub fn connect(
                         Ok(v) => v,
 
                         Err(quiche::Error::Done) => {
-                            trace!(
-                                "{} -> {}: done writing",
-                                local_addr,
-                                peer_addr
-                            );
+                            trace!("{local_addr} -> {peer_addr}: done writing");
                             break;
                         },
 
                         Err(e) => {
                             error!(
-                                "{} -> {}: send failed: {:?}",
-                                local_addr, peer_addr, e
+                                "{local_addr} -> {peer_addr}: send failed: {e:?}"
                             );
 
                             conn.close(false, 0x1, b"fail").ok();
