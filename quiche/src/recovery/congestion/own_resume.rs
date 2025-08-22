@@ -6,14 +6,15 @@ use std::{
     f64::consts::E,
     fs::{read_to_string, File},
     io::{Read, Write},
-    time::{Duration, Instant}, u64,
+    time::{Duration, Instant,SystemTime,UNIX_EPOCH},
+    u64,
 };
 //write back saved cc params to file
 use std::fs;
 use std::path::Path;
 
 const SAVED_CC_FILE: &str = "saved_params.csv";
-const CR_EVENT_MAXIMUM_GAP: Duration = Duration::from_secs(60);
+const PARAMS_MAXIMUM_GAP: Duration = Duration::from_secs(120 * 60);
 const MAX_JUMP: usize = 2000; //configured max cwnd
 
 // No observe state as that always applies to the saved connection and never the current connection
@@ -61,14 +62,14 @@ impl OwnResume {
         let mut saved_rtt = Duration::from_secs(u64::MAX);
 
         let mut saved_cwnd = 0;
+        let mut saved_time = Duration::ZERO;
         if Path::new(SAVED_CC_FILE).exists() {
             let file_contents = fs::read_to_string(file_name).unwrap();
             let file_array: Vec<&str> = file_contents.split(',').collect();
             if file_array.len() > 1 {
                 let rtt_string = file_array[1];
                 if let Ok(rtt_int) = rtt_string.parse::<u64>() {
-                    saved_rtt =
-                        Duration::from_secs(rtt_int.try_into().unwrap());
+                    saved_rtt = Duration::from_secs(rtt_int.try_into().unwrap());
                     println!("Found saved rtt! {:?}", saved_rtt);
                 } else {
                     println!("Didnt find rtt");
@@ -80,6 +81,20 @@ impl OwnResume {
                     println!("Found saved cwnd! {:?}", saved_cwnd);
                 } else {
                     println!("Didnt find cwnd");
+                }
+
+                let time_string = file_array[5];
+                if let Ok(time_int) = time_string.parse::<u64>() {
+                    saved_time =
+                        Duration::from_secs(time_int.try_into().unwrap());
+                    println!("Found saved time! {:?}", saved_time);
+                } else {
+                    println!("Didnt find time");
+                }
+                let current_time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+                if current_time-saved_time>PARAMS_MAXIMUM_GAP{
+                    //abort 
+                    enabled=false;
                 }
             } else {
                 enabled = false;
@@ -339,8 +354,7 @@ impl CRMetrics {
 
         let should_update = if new_cwnd < self.iw * 4 {
             false
-        } else if time_since_last_update > CR_EVENT_MAXIMUM_GAP {
-            true
+        
         } else {
             let secs_since_last_update = time_since_last_update.as_secs_f64();
             if secs_since_last_update == 0.0 {
