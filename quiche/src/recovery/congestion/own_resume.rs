@@ -245,8 +245,11 @@ impl OwnResume {
         }
         match self.cr_state {
             CrState::Reconnaissance => {
-                //self.jump_cwnd = (self.saved_cwnd / 2).saturating_sub(cwnd);
-                self.jump_cwnd = cmp::max(MAX_JUMP, self.saved_cwnd / 2); //--> this _would_ be correct following the draft, but it adds roughly 5s to flow completion?
+                self.jump_cwnd = (self.saved_cwnd / 2).saturating_sub(cwnd);
+                let manual=self.saved_cwnd/2-cwnd;
+
+                println!("Jump_cwnd is {:?}, manually subtracted its {:?}, while actual division is {:?}",self.jump_cwnd,manual,self.saved_cwnd/2);
+                //self.jump_cwnd = cmp::max(MAX_JUMP, self.saved_cwnd / 2); //--> this _would_ be correct following the draft, but it adds roughly 5s to flow completion?
                 println!("-----------jump is: {:?}----------", self.jump_cwnd);
                 if self.jump_cwnd == 0 {
                     self.change_state(CrState::Normal);
