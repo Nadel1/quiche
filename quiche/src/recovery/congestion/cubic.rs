@@ -234,13 +234,13 @@ fn on_packet_acked(
         // In Slow start, bytes_acked_sl is used for counting
         // acknowledged bytes.
         r.bytes_acked_sl += packet.size;
-        println!("Slow start!!");
+  
         if r.bytes_acked_sl >= r.max_datagram_size {
             if r.hystart.in_css() {
                 r.congestion_window +=
                     r.hystart.css_cwnd_inc(r.max_datagram_size);
             } else {
-                if r.resume.enabled() {
+                if r.enable_cr &&r.resume.enabled() {
                     println!("------------Careful resume is enabled!!!------------");
                     let cr_state = r.resume.get_state();
                     match cr_state {

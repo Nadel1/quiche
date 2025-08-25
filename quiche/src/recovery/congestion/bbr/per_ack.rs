@@ -104,7 +104,7 @@ fn bbr_update_round(r: &mut Congestion, packet: &Acked) {
             bbr.carefully_resuming = false;
         }
         bbr.round_start = true;
-        if r.resume.enabled() {
+        if r.enable_cr && r.resume.enabled() {
             println!("--------resume is enabled, set up new cwnd-----------");
             // start unvalidated state at the start of a new round
             //r.resume.change_state(CrState::Unvalidated(packet.pkt_num));
@@ -225,7 +225,7 @@ fn bbr_set_cwnd(r: &mut Congestion, bytes_in_flight: usize) {
             || r.delivery_rate.delivered()
                 < r.max_datagram_size * r.initial_congestion_window_packets
         {
-            if r.resume.enabled() {
+            if r.enable_cr && r.resume.enabled() {
                 println!("------------Careful resume is enabled!!!------------");
                 let cr_state = r.resume.get_state();
                 match cr_state {
@@ -241,7 +241,6 @@ fn bbr_set_cwnd(r: &mut Congestion, bytes_in_flight: usize) {
                 );
                 r.congestion_window += acked_bytes;
             }
-
         }
 
         r.congestion_window = r.congestion_window.max(bbr_min_pipe_cwnd(r))

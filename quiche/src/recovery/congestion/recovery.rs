@@ -530,7 +530,7 @@ impl LegacyRecovery {
             self.bytes_in_flight
                 .saturating_subtract(loss.lost_bytes, now);
 
-            if self.congestion.resume.enabled() {
+            if self.congestion.enable_cr && self.congestion.resume.enabled() {
                 let largest_sent_pkt = self.epochs[epoch]
                     .sent_packets
                     .iter()
@@ -632,7 +632,7 @@ impl RecoveryOps for LegacyRecovery {
         let iw_acked =
             bytes_acked >= self.congestion.initial_congestion_window_packets;
 
-        if self.congestion.resume.enabled()
+        if self.congestion.enable_cr && self.congestion.resume.enabled()
         //&& epoch == packet::Epoch::Application
         {
             let largest_sent_pkt = self.epochs[epoch]
@@ -747,7 +747,7 @@ impl RecoveryOps for LegacyRecovery {
         let bytes_acked = self.congestion.resume.total_acked;
         let iw_acked =
             bytes_acked >= self.congestion.initial_congestion_window_packets;
-        if self.congestion.resume.enabled() {
+        if self.congestion.enable_cr && self.congestion.resume.enabled() {
             for packet in self.newly_acked.iter() {
                 let largest_sent_pkt = self.epochs[epoch]
                     .sent_packets
@@ -766,8 +766,8 @@ impl RecoveryOps for LegacyRecovery {
                     self.congestion.congestion_window = new_cwnd;
                 }
                 if let Some(new_ssthresh) = new_ssthresh {
-                    let mut new_thresh=SsThresh::default();
-                    new_thresh.update(new_ssthresh, false);//css: would be relevant for hystart, not used outside of it, assume it to be false
+                    let mut new_thresh = SsThresh::default();
+                    new_thresh.update(new_ssthresh, false); //css: would be relevant for hystart, not used outside of it, assume it to be false
                     self.congestion.ssthresh = new_thresh;
                 }
             }

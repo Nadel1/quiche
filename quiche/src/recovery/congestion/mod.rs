@@ -140,6 +140,8 @@ pub struct Congestion {
     pub(crate) resume: own_resume::OwnResume,
     pub(crate) cr_metrics: own_resume::CRMetrics,
 
+    pub enable_cr: bool,
+
     save_rtt: u64,
     save_cwnd: usize,
 }
@@ -197,12 +199,13 @@ impl Congestion {
             bbr_state: bbr::State::new(),
 
             bbr2_state: bbr2::State::new(),
-
+            enable_cr: false,
             resume: own_resume::OwnResume::new(trace_id, SAVED_CC_FILE),
             cr_metrics: own_resume::CRMetrics::new(
                 trace_id,
                 initial_congestion_window,
             ),
+
             save_rtt: u64::MAX,
             save_cwnd: 1,
         };
@@ -293,8 +296,8 @@ impl Congestion {
             self.prr.on_packet_sent(sent_bytes);
 
             // HyStart++: Start of the round in a slow start.
-            if self.hystart.enabled() &&
-                self.congestion_window < self.ssthresh.get()
+            if self.hystart.enabled()
+                && self.congestion_window < self.ssthresh.get()
             {
                 self.hystart.start_round(pkt.pkt_num);
             }
@@ -302,30 +305,33 @@ impl Congestion {
 
         // Pacing: Set the pacing rate if CC doesn't do its own.
         // COPIED from https://github.com/ana-cc/quiche/blob/resume_latest/quiche/src/recovery/congestion/mod.rs (14.08.2025)
-        match self.resume.get_state() {
-            own_resume::CrState::Normal => {
-                if !(self.cc_ops.has_custom_pacing)()
-                    && rtt_stats.has_first_rtt_sample
-                {
-                    let rate = PACING_MULTIPLIER * self.congestion_window as f64
-                        / rtt_stats.smoothed_rtt.as_secs_f64();
-                    self.set_pacing_rate(rate as u64, now);
-                }
-            },
-            own_resume::CrState::Unvalidated(_) => {
-                if !(self.cc_ops.has_custom_pacing)()
-                    && rtt_stats.has_first_rtt_sample
-                {
-                    //see page 19 of https://datatracker.ietf.org/doc/draft-ietf-tsvwg-careful-resume/
-                    let inter_transmission_time: f64 =
-                        (rtt_stats.smoothed_rtt.as_secs_f64()
-                            * self.max_datagram_size as f64)
-                            / self.resume.get_jump_cwnd() as f64;
+        if self.enable_cr {
+            match self.resume.get_state() {
+                own_resume::CrState::Normal => {
+                    if !(self.cc_ops.has_custom_pacing)()
+                        && rtt_stats.has_first_rtt_sample
+                    {
+                        let rate = PACING_MULTIPLIER
+                            * self.congestion_window as f64
+                            / rtt_stats.smoothed_rtt.as_secs_f64();
+                        self.set_pacing_rate(rate as u64, now);
+                    }
+                },
+                own_resume::CrState::Unvalidated(_) => {
+                    if !(self.cc_ops.has_custom_pacing)()
+                        && rtt_stats.has_first_rtt_sample
+                    {
+                        //see page 19 of https://datatracker.ietf.org/doc/draft-ietf-tsvwg-careful-resume/
+                        let inter_transmission_time: f64 =
+                            (rtt_stats.smoothed_rtt.as_secs_f64()
+                                * self.max_datagram_size as f64)
+                                / self.resume.get_jump_cwnd() as f64;
 
-                    self.set_pacing_rate(inter_transmission_time as u64, now);
-                }
-            },
-            _ => {},
+                        self.set_pacing_rate(inter_transmission_time as u64, now);
+                    }
+                },
+                _ => {},
+            }
         }
 
         if !(self.cc_ops.has_custom_pacing)() && rtt_stats.has_first_rtt_sample {}
@@ -359,11 +365,13 @@ impl Congestion {
             now,
             rtt_stats,
         );
-        match self.resume.get_state() {
-            own_resume::CrState::Normal => {
-                self.calculate_saved_params(rtt_stats);
-            },
-            _ => {},
+        if self.enable_cr {
+            match self.resume.get_state() {
+                own_resume::CrState::Normal => {
+                    self.calculate_saved_params(rtt_stats);
+                },
+                _ => {},
+            }
         }
     }
 

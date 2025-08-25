@@ -569,7 +569,7 @@ fn bbr2_update_round(r: &mut Congestion, packet: &Acked) {
         {
             r.bbr2_state.carefully_resuming = false;
         }
-        if r.resume.enabled() {
+        if r.enable_cr && r.resume.enabled() {
             println!("--------resume is enabled, set up new cwnd-----------");
             // start unvalidated state at the start of a new round
             //r.resume.change_state(CrState::Unvalidated(packet.pkt_num));
@@ -788,7 +788,7 @@ fn bbr2_set_cwnd(r: &mut Congestion, in_flight: usize) {
             || r.delivery_rate.delivered()
                 < r.max_datagram_size * r.initial_congestion_window_packets
         {
-            if r.resume.enabled() {
+            if r.enable_cr && r.resume.enabled() {
                 println!("------------Careful resume is enabled!!!------------");
                 let cr_state = r.resume.get_state();
                 match cr_state {
