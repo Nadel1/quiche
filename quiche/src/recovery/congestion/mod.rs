@@ -25,11 +25,8 @@
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use debug_panic::debug_panic;
-use std::fs::File;
-use std::io::Write;
-use std::path::Path;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use std::{fs, u64};
+use std::time::Duration;
+use std::time::Instant;
 
 use self::recovery::Acked;
 use super::bandwidth::Bandwidth;
@@ -41,7 +38,6 @@ use crate::recovery::CongestionControlAlgorithm;
 use crate::StartupExit;
 use crate::StartupExitReason;
 
-const SAVED_CC_FILE: &str = "saved_params.csv";
 pub const PACING_MULTIPLIER: f64 = 1.25;
 
 pub struct SsThresh {
@@ -135,26 +131,14 @@ pub struct Congestion {
     max_datagram_size: usize,
 
     pub(crate) lost_count: usize,
-    initial_congestion_window: usize,
-    //Careful resume
-    pub(crate) resume: own_resume::OwnResume,
-    pub(crate) cr_metrics: own_resume::CRMetrics,
-
-    pub enable_cr: bool,
-
-    save_rtt: u64,
-    save_cwnd: usize,
 }
 
 impl Congestion {
-    pub(crate) fn from_config(
-        recovery_config: &RecoveryConfig, trace_id: &str,
-    ) -> Self {
-        let initial_congestion_window = recovery_config.max_send_udp_payload_size
-            * recovery_config.initial_congestion_window_packets;
+    pub(crate) fn from_config(recovery_config: &RecoveryConfig) -> Self {
+        let initial_congestion_window = recovery_config.max_send_udp_payload_size *
+            recovery_config.initial_congestion_window_packets;
 
         let mut cc = Congestion {
-            initial_congestion_window,
             congestion_window: initial_congestion_window,
 
             ssthresh: Default::default(),
@@ -199,15 +183,6 @@ impl Congestion {
             bbr_state: bbr::State::new(),
 
             bbr2_state: bbr2::State::new(),
-            enable_cr: false,
-            resume: own_resume::OwnResume::new(trace_id, SAVED_CC_FILE),
-            cr_metrics: own_resume::CRMetrics::new(
-                trace_id,
-                initial_congestion_window,
-            ),
-
-            save_rtt: u64::MAX,
-            save_cwnd: 1,
         };
 
         (cc.cc_ops.on_init)(&mut cc);
@@ -217,9 +192,8 @@ impl Congestion {
 
     pub(crate) fn in_congestion_recovery(&self, sent_time: Instant) -> bool {
         match self.congestion_recovery_start_time {
-            Some(congestion_recovery_start_time) => {
-                sent_time <= congestion_recovery_start_time
-            },
+            Some(congestion_recovery_start_time) =>
+                sent_time <= congestion_recovery_start_time,
 
             None => false,
         }
@@ -246,41 +220,6 @@ impl Congestion {
         self.app_limited = v;
     }
 
-    fn calculate_saved_params(&mut self, rtt_stats: &RttStats) {
-        //rtt as low as possible, cwnd as high as  possible
-
-        if Path::new(SAVED_CC_FILE).exists() {
-            let mut saved_cwnd = self.resume.get_saved_cwnd();
-            let mut saved_rtt = self.resume.get_saved_rtt();
-
-            if saved_rtt > rtt_stats.rtt().as_secs() {
-                saved_rtt = rtt_stats.smoothed_rtt.as_secs();
-            }
-
-            if saved_cwnd < self.delivery_rate.delivered() as f64 {
-                saved_cwnd = self.delivery_rate.delivered() as f64;
-            }
-            if saved_cwnd > (4 * self.initial_congestion_window) as f64 {
-                self.write_params_to_file(saved_rtt, saved_cwnd as usize);
-            }
-        } else {
-            File::create(SAVED_CC_FILE).unwrap();
-        }
-    }
-    fn write_params_to_file(&mut self, saved_rtt: u64, saved_cwnd: usize) {
-        let mut file = File::create(SAVED_CC_FILE).unwrap();
-        let mut save_string = "SAVED_RTT,".to_owned();
-        save_string.push_str(&saved_rtt.to_string());
-        save_string.push_str(",SAVED_CWND,");
-        save_string.push_str(&saved_cwnd.to_string());
-        save_string.push_str(",timestamp,");
-        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH);
-        save_string.push_str(&timestamp.unwrap().as_secs().to_string());
-
-        println!("Saving: {}", save_string);
-        let _ = file.write_all(save_string.as_bytes());
-    }
-
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn on_packet_sent(
         &mut self, bytes_in_flight: usize, sent_bytes: usize, now: Instant,
@@ -296,45 +235,19 @@ impl Congestion {
             self.prr.on_packet_sent(sent_bytes);
 
             // HyStart++: Start of the round in a slow start.
-            if self.hystart.enabled()
-                && self.congestion_window < self.ssthresh.get()
+            if self.hystart.enabled() &&
+                self.congestion_window < self.ssthresh.get()
             {
                 self.hystart.start_round(pkt.pkt_num);
             }
         }
 
         // Pacing: Set the pacing rate if CC doesn't do its own.
-        // COPIED from https://github.com/ana-cc/quiche/blob/resume_latest/quiche/src/recovery/congestion/mod.rs (14.08.2025)
-        if self.enable_cr {
-            match self.resume.get_state() {
-                own_resume::CrState::Normal => {
-                    if !(self.cc_ops.has_custom_pacing)()
-                        && rtt_stats.has_first_rtt_sample
-                    {
-                        let rate = PACING_MULTIPLIER
-                            * self.congestion_window as f64
-                            / rtt_stats.smoothed_rtt.as_secs_f64();
-                        self.set_pacing_rate(rate as u64, now);
-                    }
-                },
-                own_resume::CrState::Unvalidated(_) => {
-                    if !(self.cc_ops.has_custom_pacing)()
-                        && rtt_stats.has_first_rtt_sample
-                    {
-                        //see page 19 of https://datatracker.ietf.org/doc/draft-ietf-tsvwg-careful-resume/
-                        let inter_transmission_time: f64 =
-                            (rtt_stats.smoothed_rtt.as_secs_f64()
-                                * self.max_datagram_size as f64)
-                                / self.resume.get_jump_cwnd() as f64;
-
-                        self.set_pacing_rate(inter_transmission_time as u64, now);
-                    }
-                },
-                _ => {},
-            }
+        if !(self.cc_ops.has_custom_pacing)() && rtt_stats.has_first_rtt_sample {
+            let rate = PACING_MULTIPLIER * self.congestion_window as f64 /
+                rtt_stats.smoothed_rtt.as_secs_f64();
+            self.set_pacing_rate(rate as u64, now);
         }
-
-        if !(self.cc_ops.has_custom_pacing)() && rtt_stats.has_first_rtt_sample {}
 
         self.schedule_next_packet(now, sent_bytes);
 
@@ -365,14 +278,6 @@ impl Congestion {
             now,
             rtt_stats,
         );
-        if self.enable_cr {
-            match self.resume.get_state() {
-                own_resume::CrState::Normal => {
-                    self.calculate_saved_params(rtt_stats);
-                },
-                _ => {},
-            }
-        }
     }
 
     fn schedule_next_packet(&mut self, now: Instant, packet_size: usize) {
@@ -380,8 +285,8 @@ impl Congestion {
         //   * Packet contains no data.
         //   * The congestion window is within initcwnd.
 
-        let in_initcwnd = self.congestion_window
-            < self.max_datagram_size * self.initial_congestion_window_packets;
+        let in_initcwnd = self.congestion_window <
+            self.max_datagram_size * self.initial_congestion_window_packets;
 
         let sent_bytes = if !self.pacer.enabled() || in_initcwnd {
             0
@@ -508,7 +413,6 @@ mod bbr2;
 mod cubic;
 mod delivery_rate;
 mod hystart;
-mod own_resume;
 pub(crate) mod pacer;
 mod prr;
 pub(crate) mod recovery;

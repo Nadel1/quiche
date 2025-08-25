@@ -36,8 +36,6 @@ use super::Sent;
 
 use crate::packet::Epoch;
 use crate::ranges::RangeSet;
-use crate::recovery::congestion::hystart;
-use crate::recovery::congestion::SsThresh;
 use crate::recovery::Bandwidth;
 use crate::recovery::HandshakeStatus;
 use crate::recovery::OnLossDetectionTimeoutOutcome;
@@ -245,8 +243,8 @@ impl RecoveryEpoch {
 
         for unacked in unacked_iter {
             // Mark packet as lost, or set time when it should be marked.
-            if unacked.time_sent <= lost_send_time
-                || largest_acked >= unacked.pkt_num + pkt_thresh
+            if unacked.time_sent <= lost_send_time ||
+                largest_acked >= unacked.pkt_num + pkt_thresh
             {
                 self.lost_frames.extend(unacked.frames.drain(..));
 
@@ -282,9 +280,8 @@ impl RecoveryEpoch {
                 let loss_time = match self.loss_time {
                     None => unacked.time_sent + loss_delay,
 
-                    Some(loss_time) => {
-                        cmp::min(loss_time, unacked.time_sent + loss_delay)
-                    },
+                    Some(loss_time) =>
+                        cmp::min(loss_time, unacked.time_sent + loss_delay),
                 };
 
                 self.loss_time = Some(loss_time);
@@ -365,7 +362,6 @@ pub struct LegacyRecovery {
 
 impl LegacyRecovery {
     pub fn new_with_config(recovery_config: &RecoveryConfig) -> Self {
-        let trace_id = "ph"; //placeholder for now
         Self {
             epochs: Default::default(),
 
@@ -400,7 +396,7 @@ impl LegacyRecovery {
 
             outstanding_non_ack_eliciting: 0,
 
-            congestion: Congestion::from_config(recovery_config, trace_id),
+            congestion: Congestion::from_config(recovery_config),
 
             newly_acked: Vec::new(),
         }
@@ -486,8 +482,8 @@ impl LegacyRecovery {
             return;
         }
 
-        if self.bytes_in_flight.is_zero()
-            && handshake_status.peer_verified_address
+        if self.bytes_in_flight.is_zero() &&
+            handshake_status.peer_verified_address
         {
             self.loss_timer.clear();
             return;
@@ -513,7 +509,7 @@ impl LegacyRecovery {
             trace_id,
             epoch,
         );
-        //COPIED FROM https://github.com/ana-cc/quiche/tree/resume_latest (12.08.2025)
+
         if let Some(pkt) = loss.largest_lost_pkt {
             if !self.congestion.in_congestion_recovery(pkt.time_sent) {
                 (self.congestion.cc_ops.checkpoint)(&mut self.congestion);
@@ -529,23 +525,6 @@ impl LegacyRecovery {
 
             self.bytes_in_flight
                 .saturating_subtract(loss.lost_bytes, now);
-
-            if self.congestion.enable_cr && self.congestion.resume.enabled() {
-                let largest_sent_pkt = self.epochs[epoch]
-                    .sent_packets
-                    .iter()
-                    .map(|p| p.pkt_num)
-                    .max()
-                    .unwrap_or_default();
-                let new_cwnd =
-                    self.congestion.resume.congestion_event(largest_sent_pkt);
-                if new_cwnd != 0 {
-                    self.congestion.congestion_window = cmp::max(
-                        new_cwnd,
-                        self.congestion.initial_congestion_window_packets,
-                    );
-                }
-            }
         };
 
         self.bytes_in_flight
@@ -564,9 +543,9 @@ impl RecoveryOps for LegacyRecovery {
     /// Returns whether or not we should elicit an ACK even if we wouldn't
     /// otherwise have constructed an ACK eliciting packet.
     fn should_elicit_ack(&self, epoch: Epoch) -> bool {
-        self.epochs[epoch].loss_probes > 0
-            || self.outstanding_non_ack_eliciting
-                >= MAX_OUTSTANDING_NON_ACK_ELICITING
+        self.epochs[epoch].loss_probes > 0 ||
+            self.outstanding_non_ack_eliciting >=
+                MAX_OUTSTANDING_NON_ACK_ELICITING
     }
 
     fn get_acked_frames(&mut self, epoch: Epoch) -> Vec<frame::Frame> {
@@ -626,31 +605,6 @@ impl RecoveryOps for LegacyRecovery {
             self.bytes_lost,
             in_flight,
         );
-
-        // COPIED FROM https://github.com/ana-cc/quiche/blob/resume_latest/quiche/src/recovery/mod.rs (12.08.2025)
-        let bytes_acked = self.congestion.resume.total_acked;
-        let iw_acked =
-            bytes_acked >= self.congestion.initial_congestion_window_packets;
-
-        if self.congestion.enable_cr && self.congestion.resume.enabled()
-        //&& epoch == packet::Epoch::Application
-        {
-            let largest_sent_pkt = self.epochs[epoch]
-                .sent_packets
-                .iter()
-                .map(|p| p.pkt_num)
-                .max()
-                .unwrap_or_default();
-            // Increase the congestion window by a jump determined by careful resume
-            self.congestion.congestion_window +=
-                self.congestion.resume.send_packet(
-                    Some(self.rtt_stats.smoothed_rtt),
-                    self.congestion.congestion_window,
-                    largest_sent_pkt,
-                    self.congestion.app_limited,
-                    iw_acked,
-                );
-        }
 
         if in_flight {
             self.epochs[epoch].in_flight_count += 1;
@@ -726,8 +680,8 @@ impl RecoveryOps for LegacyRecovery {
         self.epochs[epoch].largest_acked_packet = Some(largest_acked_pkt_num);
 
         // Check if largest packet is newly acked.
-        if largest_newly_acked.pkt_num == largest_acked_pkt_num
-            && has_ack_eliciting
+        if largest_newly_acked.pkt_num == largest_acked_pkt_num &&
+            has_ack_eliciting
         {
             let latest_rtt = now - largest_newly_acked.time_sent;
             self.rtt_stats.update_rtt(
@@ -742,36 +696,6 @@ impl RecoveryOps for LegacyRecovery {
         // packets list.
         let (lost_packets, lost_bytes) =
             self.detect_lost_packets(epoch, now, trace_id);
-
-        // COPIED FROM https://github.com/ana-cc/quiche/blob/resume_latest/quiche/src/recovery/mod.rs (12.08.2025)
-        let bytes_acked = self.congestion.resume.total_acked;
-        let iw_acked =
-            bytes_acked >= self.congestion.initial_congestion_window_packets;
-        if self.congestion.enable_cr && self.congestion.resume.enabled() {
-            for packet in self.newly_acked.iter() {
-                let largest_sent_pkt = self.epochs[epoch]
-                    .sent_packets
-                    .iter()
-                    .map(|p| p.pkt_num)
-                    .max()
-                    .unwrap_or_default();
-                let (new_cwnd, new_ssthresh) =
-                    self.congestion.resume.process_ack(
-                        largest_sent_pkt,
-                        packet,
-                        self.bytes_in_flight.get(),
-                        iw_acked,
-                    );
-                if let Some(new_cwnd) = new_cwnd {
-                    self.congestion.congestion_window = new_cwnd;
-                }
-                if let Some(new_ssthresh) = new_ssthresh {
-                    let mut new_thresh = SsThresh::default();
-                    new_thresh.update(new_ssthresh, false); //css: would be relevant for hystart, not used outside of it, assume it to be false
-                    self.congestion.ssthresh = new_thresh;
-                }
-            }
-        }
 
         self.congestion.on_packets_acked(
             self.bytes_in_flight.get(),
@@ -920,8 +844,8 @@ impl RecoveryOps for LegacyRecovery {
         }
 
         // Open more space (snd_cnt) for PRR when allowed.
-        self.cwnd().saturating_sub(self.bytes_in_flight.get())
-            + self.congestion.prr.snd_cnt
+        self.cwnd().saturating_sub(self.bytes_in_flight.get()) +
+            self.congestion.prr.snd_cnt
     }
 
     fn rtt(&self) -> Duration {
@@ -961,12 +885,12 @@ impl RecoveryOps for LegacyRecovery {
     fn pmtud_update_max_datagram_size(&mut self, new_max_datagram_size: usize) {
         // Congestion Window is updated only when it's not updated already.
         // Update cwnd if it hasn't been updated yet.
-        if self.cwnd()
-            == self.max_datagram_size
-                * self.congestion.initial_congestion_window_packets
+        if self.cwnd() ==
+            self.max_datagram_size *
+                self.congestion.initial_congestion_window_packets
         {
-            self.congestion.congestion_window = new_max_datagram_size
-                * self.congestion.initial_congestion_window_packets;
+            self.congestion.congestion_window = new_max_datagram_size *
+                self.congestion.initial_congestion_window_packets;
         }
 
         self.congestion.pacer = pacer::Pacer::new(

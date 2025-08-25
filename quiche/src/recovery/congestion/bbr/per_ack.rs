@@ -28,7 +28,6 @@ use std::cmp;
 
 use super::*;
 use crate::rand;
-use crate::recovery::congestion::own_resume::CrState;
 use crate::recovery::MINIMUM_WINDOW_PACKETS;
 
 /// 1.2Mbps in bytes/sec
@@ -76,8 +75,8 @@ pub fn bbr_update_control_parameters(
 fn bbr_update_btlbw(r: &mut Congestion, packet: &Acked, _bytes_in_flight: usize) {
     bbr_update_round(r, packet);
 
-    if r.delivery_rate().to_bytes_per_second() >= r.bbr_state.btlbw
-        || !r.delivery_rate.sample_is_app_limited()
+    if r.delivery_rate().to_bytes_per_second() >= r.bbr_state.btlbw ||
+        !r.delivery_rate.sample_is_app_limited()
     {
         // Since minmax filter is based on time,
         // start_time + (round_count as seconds) is used instead.
@@ -96,29 +95,7 @@ fn bbr_update_round(r: &mut Congestion, packet: &Acked) {
     if packet.delivered >= bbr.next_round_delivered {
         bbr.next_round_delivered = r.delivery_rate.delivered();
         bbr.round_count += 1;
-
-        // set carefully resuming back to false after it has been set to true for two rounds
-        if bbr.carefully_resuming
-            && bbr.round_count - bbr.careful_resume_rounds > 5
-        {
-            bbr.carefully_resuming = false;
-        }
         bbr.round_start = true;
-        if r.enable_cr && r.resume.enabled() {
-            println!("--------resume is enabled, set up new cwnd-----------");
-            // start unvalidated state at the start of a new round
-            //r.resume.change_state(CrState::Unvalidated(packet.pkt_num));
-            //set carefully resuming to true
-            bbr.carefully_resuming = true;
-            //set pacing rate
-            bbr.pacing_rate =
-                cmp::max(bbr.btlbw * bbr.pacing_rate, bbr.pacing_rate);
-            let new_cwnd = cmp::max(bbr.btlbw, bbr.pacing_rate) as usize
-                * bbr.rtprop.as_secs() as usize
-                * bbr.cwnd_gain as usize;
-            r.congestion_window = new_cwnd;
-            bbr.careful_resume_rounds = bbr.round_count;
-        }
         bbr.packet_conservation = false;
     } else {
         bbr.round_start = false;
@@ -221,26 +198,11 @@ fn bbr_set_cwnd(r: &mut Congestion, bytes_in_flight: usize) {
                 r.congestion_window + acked_bytes,
                 r.bbr_state.target_cwnd,
             )
-        } else if r.congestion_window < r.bbr_state.target_cwnd
-            || r.delivery_rate.delivered()
-                < r.max_datagram_size * r.initial_congestion_window_packets
+        } else if r.congestion_window < r.bbr_state.target_cwnd ||
+            r.delivery_rate.delivered() <
+                r.max_datagram_size * r.initial_congestion_window_packets
         {
-            if r.enable_cr && r.resume.enabled() {
-                println!("------------Careful resume is enabled!!!------------");
-                let cr_state = r.resume.get_state();
-                match cr_state {
-                    CrState::Unvalidated(_) => {},
-                    CrState::SafeRetreat(_) => {},
-                    _ => {
-                        r.congestion_window += acked_bytes;
-                    },
-                }
-            } else {
-                println!(
-                    "------------Careful resume is not enabled!!!------------"
-                );
-                r.congestion_window += acked_bytes;
-            }
+            r.congestion_window += acked_bytes;
         }
 
         r.congestion_window = r.congestion_window.max(bbr_min_pipe_cwnd(r))
@@ -252,16 +214,16 @@ fn bbr_set_cwnd(r: &mut Congestion, bytes_in_flight: usize) {
 // 4.3.2.2.  Estimating When Startup has Filled the Pipe
 fn bbr_check_full_pipe(r: &mut Congestion) {
     // No need to check for a full pipe now.
-    if r.bbr_state.filled_pipe
-        || !r.bbr_state.round_start
-        || r.delivery_rate.sample_is_app_limited()
+    if r.bbr_state.filled_pipe ||
+        !r.bbr_state.round_start ||
+        r.delivery_rate.sample_is_app_limited()
     {
         return;
     }
 
     // BBR.BtlBw still growing?
-    if r.bbr_state.btlbw
-        >= (r.bbr_state.full_bw as f64 * BTLBW_GROWTH_TARGET) as u64
+    if r.bbr_state.btlbw >=
+        (r.bbr_state.full_bw as f64 * BTLBW_GROWTH_TARGET) as u64
     {
         // record new baseline level
         r.bbr_state.full_bw = r.bbr_state.btlbw;
@@ -283,11 +245,6 @@ fn bbr_enter_drain(r: &mut Congestion) {
 
     bbr.state = BBRStateMachine::Drain;
 
-    //entered drain phase while carefully_resuming set to true
-    if bbr.carefully_resuming {
-        r.resume.change_state(CrState::SafeRetreat(0));
-    }
-
     // pace slowly
     bbr.pacing_gain = 1.0 / BBR_HIGH_GAIN;
 
@@ -300,8 +257,8 @@ fn bbr_check_drain(r: &mut Congestion, bytes_in_flight: usize, now: Instant) {
         bbr_enter_drain(r);
     }
 
-    if r.bbr_state.state == BBRStateMachine::Drain
-        && bbr_bytes_in_net(r, bytes_in_flight, now) <= bbr_inflight(r, 1.0)
+    if r.bbr_state.state == BBRStateMachine::Drain &&
+        bbr_bytes_in_net(r, bytes_in_flight, now) <= bbr_inflight(r, 1.0)
     {
         // we estimate queue is drained
         bbr_enter_probe_bw(r, now);
@@ -345,9 +302,9 @@ fn bbr_enter_probe_bw(r: &mut Congestion, now: Instant) {
     // increase cycle_index by 1, the actual cycle_index in the
     // beginning of ProbeBW will be one of (2, 3, 4, 5, 6, 7, 0)
     // to avoid index 1 (pacing_gain=3/4). See 4.3.4.2 for details.
-    bbr.cycle_index = BBR_GAIN_CYCLE_LEN
-        - 1
-        - (rand::rand_u64_uniform(BBR_GAIN_CYCLE_LEN as u64 - 1) as usize);
+    bbr.cycle_index = BBR_GAIN_CYCLE_LEN -
+        1 -
+        (rand::rand_u64_uniform(BBR_GAIN_CYCLE_LEN as u64 - 1) as usize);
 
     bbr_advance_cycle_phase(r, now);
 }
@@ -384,9 +341,9 @@ fn bbr_is_next_cycle_phase(r: &mut Congestion, now: Instant) -> bool {
     }
 
     if pacing_gain > 1.0 {
-        return is_full_length
-            && (lost_bytes > 0
-                || prior_in_flight >= bbr_inflight(r, pacing_gain));
+        return is_full_length &&
+            (lost_bytes > 0 ||
+                prior_in_flight >= bbr_inflight(r, pacing_gain));
     }
 
     is_full_length || prior_in_flight <= bbr_inflight(r, 1.0)
@@ -394,9 +351,9 @@ fn bbr_is_next_cycle_phase(r: &mut Congestion, now: Instant) -> bool {
 
 // 4.3.5.  ProbeRTT
 fn bbr_check_probe_rtt(r: &mut Congestion, bytes_in_flight: usize, now: Instant) {
-    if r.bbr_state.state != BBRStateMachine::ProbeRTT
-        && r.bbr_state.rtprop_expired
-        && !r.bbr_state.idle_restart
+    if r.bbr_state.state != BBRStateMachine::ProbeRTT &&
+        r.bbr_state.rtprop_expired &&
+        !r.bbr_state.idle_restart
     {
         bbr_enter_probe_rtt(r);
 
