@@ -91,7 +91,7 @@ async fn main() -> tokio_quiche::QuicResult<()> {
                         ..
                     },
                 )) => {
-                    log::info!("incomming headers"; "stream_id" => stream_id, "headers" => ?headers);
+                    log::info!("incoming headers"; "stream_id" => stream_id, "headers" => ?headers);
                     'body: while let Some(frame) = recv.recv().await {
                         match frame {
                             InboundFrame::Body(pooled, fin) => {
