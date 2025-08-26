@@ -29,7 +29,7 @@ use std::fs::File;
 use std::io::Write;
 use std::path::Path;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use std::{fs, u64};
+use std::u64;
 
 use self::recovery::Acked;
 use super::bandwidth::Bandwidth;
@@ -138,10 +138,6 @@ pub struct Congestion {
     initial_congestion_window: usize,
     //Careful resume
     pub(crate) resume: own_resume::OwnResume,
-    pub(crate) cr_metrics: own_resume::CRMetrics,
-
-    save_rtt: u64,
-    save_cwnd: usize,
 }
 
 impl Congestion {
@@ -199,12 +195,6 @@ impl Congestion {
             bbr2_state: bbr2::State::new(),
 
             resume: own_resume::OwnResume::new(trace_id, SAVED_CC_FILE),
-            cr_metrics: own_resume::CRMetrics::new(
-                trace_id,
-                initial_congestion_window,
-            ),
-            save_rtt: u64::MAX,
-            save_cwnd: 1,
         };
 
         (cc.cc_ops.on_init)(&mut cc);
@@ -293,8 +283,8 @@ impl Congestion {
             self.prr.on_packet_sent(sent_bytes);
 
             // HyStart++: Start of the round in a slow start.
-            if self.hystart.enabled() &&
-                self.congestion_window < self.ssthresh.get()
+            if self.hystart.enabled()
+                && self.congestion_window < self.ssthresh.get()
             {
                 self.hystart.start_round(pkt.pkt_num);
             }
