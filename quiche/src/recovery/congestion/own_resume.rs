@@ -2,11 +2,7 @@
 
 use crate::recovery::congestion::Acked;
 use std::{
-    cmp,
-    f64::consts::E,
-    fs::{read_to_string, File},
-    io::{Read, Write},
-    time::{Duration, Instant,SystemTime,UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
     u64,
 };
 //write back saved cc params to file
@@ -15,7 +11,6 @@ use std::path::Path;
 
 const SAVED_CC_FILE: &str = "saved_params.csv";
 const PARAMS_MAXIMUM_GAP: Duration = Duration::from_secs(120 * 60);
-const MAX_JUMP: usize = 2000; //configured max cwnd
 
 // No observe state as that always applies to the saved connection and never the current connection
 #[derive(Default, Debug, Copy, Clone, Eq, PartialEq)]
@@ -39,7 +34,6 @@ pub struct OwnResume {
     pipesize: usize,
     jump_cwnd: usize,
     pub total_acked: usize,
-    time_in_state: Instant, //make sure we dont stay in unvalidated phase longer than one rtt
     cwnd: usize,
     rtt: Option<Duration>,
 }
@@ -91,10 +85,11 @@ impl OwnResume {
                 } else {
                     println!("Didnt find time");
                 }
-                let current_time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-                if current_time-saved_time>PARAMS_MAXIMUM_GAP{
-                    //abort 
-                    enabled=false;
+                let current_time =
+                    SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+                if current_time - saved_time > PARAMS_MAXIMUM_GAP {
+                    //abort
+                    enabled = false;
                 }
             } else {
                 enabled = false;
@@ -104,7 +99,6 @@ impl OwnResume {
         }
 
         Self {
-            time_in_state: Instant::now(),
             trace_id: trace_id.to_string(),
             enabled,
             cr_state: CrState::default(),
@@ -116,13 +110,6 @@ impl OwnResume {
             rtt: Some(Duration::ZERO),
             cwnd: 0,
         }
-    }
-
-    pub fn setup(&mut self, saved_rtt: Duration, saved_cwnd: usize) {
-        self.enabled = true;
-        self.saved_rtt = saved_rtt;
-        self.saved_cwnd = saved_cwnd;
-        println!("{} careful resume configured", self.trace_id);
     }
 
     pub fn enabled(&mut self) -> bool {
@@ -143,9 +130,6 @@ impl OwnResume {
     pub fn get_state(&self) -> CrState {
         self.cr_state
     }
-    pub fn get_pipesize(&self) -> usize {
-        self.pipesize
-    }
 
     pub fn get_saved_rtt(&self) -> u64 {
         self.saved_rtt.as_secs() as u64
@@ -162,14 +146,10 @@ impl OwnResume {
     pub fn get_jump_cwnd(&self) -> usize {
         self.jump_cwnd
     }
-
-    fn update_state_timer(&mut self) {
-        self.time_in_state = Instant::now()
-    }
     // Returns (new_cwnd, new_ssthresh), both optional
     pub fn process_ack(
         &mut self, largest_pkt_sent: u64, packet: &Acked, flightsize: usize,
-        iw_acked: bool,
+        _iw_acked: bool,
     ) -> (Option<usize>, Option<usize>) {
         println!("in process ack!!");
         self.total_acked += packet.size;
@@ -245,10 +225,7 @@ impl OwnResume {
         }
         match self.cr_state {
             CrState::Reconnaissance => {
-                self.jump_cwnd = (self.saved_cwnd / 2).saturating_sub(cwnd);
-                let manual=self.saved_cwnd/2-cwnd;
-
-                println!("Jump_cwnd is {:?}, manually subtracted its {:?}, while actual division is {:?}",self.jump_cwnd,manual,self.saved_cwnd/2);
+                self.jump_cwnd = self.saved_cwnd / 2;
                 //self.jump_cwnd = cmp::max(MAX_JUMP, self.saved_cwnd / 2); //--> this _would_ be correct following the draft, but it adds roughly 5s to flow completion?
                 println!("-----------jump is: {:?}----------", self.jump_cwnd);
                 if self.jump_cwnd == 0 {
@@ -328,88 +305,3 @@ impl OwnResume {
     }
 }
 
-pub struct CRMetrics {
-    trace_id: String,
-    iw: usize,
-    min_rtt: Duration,
-    cwnd: usize,
-    last_update: Instant,
-}
-
-impl CRMetrics {
-    pub fn new(trace_id: &str, iw: usize) -> Self {
-        Self {
-            trace_id: trace_id.to_string(),
-            iw,
-            min_rtt: Duration::ZERO,
-            cwnd: 0,
-            last_update: Instant::now(),
-        }
-    }
-
-    // Implementation of the CR observe phase
-    pub fn maybe_update(
-        &mut self, new_min_rtt: Duration, new_cwnd: usize,
-    ) -> Option<CREvent> {
-        // Initial guess at something that might work, needs further research
-        let now = Instant::now();
-        let time_since_last_update = now - self.last_update;
-
-        let should_update = if new_cwnd < self.iw * 4 {
-            false
-        
-        } else {
-            let secs_since_last_update = time_since_last_update.as_secs_f64();
-            if secs_since_last_update == 0.0 {
-                false
-            } else {
-                let range = 1.0f64 / secs_since_last_update;
-
-                let min_rtt_micros = self.min_rtt.as_micros() as f64;
-                let min_rtt_range_spread = min_rtt_micros * range;
-                let min_rtt_range_min = min_rtt_micros - min_rtt_range_spread;
-                let min_rtt_range_max = min_rtt_micros + min_rtt_range_spread;
-
-                let cwnd = self.cwnd as f64;
-                let cwnd_range_spread = cwnd * range;
-                let cwnd_range_min = cwnd - cwnd_range_spread;
-                let cwnd_range_max = cwnd + cwnd_range_spread;
-
-                let new_min_rtt_micros = new_min_rtt.as_micros() as f64;
-                let new_cwnd_float = new_cwnd as f64;
-
-                new_min_rtt_micros < min_rtt_range_min
-                    || new_min_rtt_micros > min_rtt_range_max
-                    || new_cwnd_float < cwnd_range_min
-                    || new_cwnd_float > cwnd_range_max
-            }
-        };
-
-        println!(
-            "{} maybe_update(new_min_rtt={:?}, new_cwnd={}); updating={}",
-            self.trace_id, new_min_rtt, new_cwnd, should_update
-        );
-
-        if should_update {
-            self.min_rtt = new_min_rtt;
-            self.cwnd = new_cwnd;
-            self.last_update = now;
-
-            Some(CREvent {
-                cwnd: new_cwnd,
-                min_rtt: new_min_rtt,
-            })
-        } else {
-            None
-        }
-    }
-}
-
-/// An update in Careful OwnResume observed parameters to be stored/transmitted for future connections
-#[derive(Clone, Copy, Debug)]
-pub struct CREvent {
-    /// A windowed minimum round-trip-time observation
-    pub min_rtt: Duration,
-    /// The current congestion window, in bytes
-    pub cwnd: usize,
-}

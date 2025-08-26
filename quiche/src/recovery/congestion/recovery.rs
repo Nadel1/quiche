@@ -36,7 +36,6 @@ use super::Sent;
 
 use crate::packet::Epoch;
 use crate::ranges::RangeSet;
-use crate::recovery::congestion::hystart;
 use crate::recovery::congestion::SsThresh;
 use crate::recovery::Bandwidth;
 use crate::recovery::HandshakeStatus;
