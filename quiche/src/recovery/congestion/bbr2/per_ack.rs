@@ -586,7 +586,7 @@ fn bbr2_update_round(r: &mut Congestion, packet: &Acked) {
                     * r.bbr2_state.cwnd_gain as u64,
             );*/
             println!("---bbr2 old cwnd: {:?}", r.congestion_window);
-            //r.congestion_window = new_cwnd as usize;
+            r.congestion_window = new_cwnd as usize;
             //println!("----bbr2 new cwnd: {:?}",r.congestion_window);
             r.bbr2_state.careful_resume_rounds = r.bbr2_state.round_count;
         }

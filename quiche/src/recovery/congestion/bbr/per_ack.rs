@@ -112,11 +112,11 @@ fn bbr_update_round(r: &mut Congestion, packet: &Acked) {
             bbr.carefully_resuming = true;
             //set pacing rate
             bbr.pacing_rate =
-                cmp::max(bbr.btlbw * bbr.pacing_rate, bbr.pacing_rate);
-            let new_cwnd = cmp::max(bbr.btlbw, bbr.pacing_rate) as usize
-                * bbr.rtprop.as_secs() as usize
-                * bbr.cwnd_gain as usize;
-            r.congestion_window = new_cwnd;
+                cmp::max(bbr.full_bw * bbr.pacing_gain as u64, bbr.pacing_rate);
+            let new_cwnd = bbr.full_bw as usize;
+                //* bbr.rtprop.as_secs() as usize
+                //* bbr.cwnd_gain as usize;
+            //bbr.congestion_window = new_cwnd;
             bbr.careful_resume_rounds = bbr.round_count;
         }
         bbr.packet_conservation = false;
