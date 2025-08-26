@@ -578,7 +578,7 @@ fn bbr2_update_round(r: &mut Congestion, packet: &Acked) {
             //set pacing rate
             let nominal_pacing_rate=r.bbr2_state.bw * r.bbr2_state.pacing_gain as u64;
             r.bbr2_state.pacing_rate = nominal_pacing_rate;//there should be a max comparison between the nominal_pacing_rate and the calculated probing rate, but no clue where i would get the probing rate
-            let new_cwnd = r.bbr2_state.bw*2;
+            let new_cwnd = r.bbr2_state.bw;
             /*cmp::max(
                 r.bbr2_state.bw,
                 r.bbr2_state.probe_rtt_min_delay.as_secs()
