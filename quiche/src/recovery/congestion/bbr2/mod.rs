@@ -412,6 +412,8 @@ pub struct State {
 
     // reset carefully_resuming to false, 2 rounds after it started
     careful_resume_rounds: u64,
+
+    probing_rate: u64,
 }
 
 impl State {
@@ -532,10 +534,12 @@ impl State {
             loss_in_round: false,
 
             loss_events_in_round: 0,
-            
+
             carefully_resuming: false,
 
             careful_resume_rounds: 0,
+            
+            probing_rate: 0,
         }
     }
 }

@@ -86,6 +86,8 @@ fn bbr_update_btlbw(r: &mut Congestion, packet: &Acked, _bytes_in_flight: usize)
             r.bbr_state.start_time + Duration::from_secs(r.bbr_state.round_count),
             r.delivery_rate().to_bytes_per_second(),
         );
+
+        r.bbr_state.probing_rate = 0.5 as u64 * r.bbr_state.btlbw;
     }
 }
 
@@ -99,7 +101,7 @@ fn bbr_update_round(r: &mut Congestion, packet: &Acked) {
 
         // set carefully resuming back to false after it has been set to true for two rounds
         if bbr.carefully_resuming
-            && bbr.round_count - bbr.careful_resume_rounds > 5
+            && bbr.round_count - bbr.careful_resume_rounds > 2
         {
             bbr.carefully_resuming = false;
         }
@@ -112,11 +114,14 @@ fn bbr_update_round(r: &mut Congestion, packet: &Acked) {
             bbr.carefully_resuming = true;
             //set pacing rate
             bbr.pacing_rate =
-                cmp::max(bbr.full_bw * bbr.pacing_gain as u64, bbr.pacing_rate);
-            let new_cwnd = bbr.full_bw as usize;
-                //* bbr.rtprop.as_secs() as usize
-                //* bbr.cwnd_gain as usize;
-            //bbr.congestion_window = new_cwnd;
+                cmp::max(bbr.full_bw * bbr.pacing_gain as u64, bbr.probing_rate);
+            let new_cwnd = cmp::max(
+                bbr.full_bw,
+                bbr.probing_rate
+                    * bbr.rtprop.as_secs() 
+                    * bbr.cwnd_gain as u64,
+            );
+            //bbr.target_cwnd = new_cwnd as usize;
             bbr.careful_resume_rounds = bbr.round_count;
         }
         bbr.packet_conservation = false;
@@ -241,7 +246,6 @@ fn bbr_set_cwnd(r: &mut Congestion, bytes_in_flight: usize) {
                 );
                 r.congestion_window += acked_bytes;
             }
-
         }
 
         r.congestion_window = r.congestion_window.max(bbr_min_pipe_cwnd(r))
