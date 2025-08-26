@@ -577,16 +577,17 @@ fn bbr2_update_round(r: &mut Congestion, packet: &Acked) {
             r.bbr2_state.carefully_resuming = true;
             //set pacing rate
             let nominal_pacing_rate=r.bbr2_state.bw * r.bbr2_state.pacing_gain as u64;
-            r.bbr2_state.pacing_rate = nominal_pacing_rate;//there should be a max comparison between the nominal_pacing_rate and the calculated probing rate, but no clue where i would get the probing rate
-            let new_cwnd = r.bbr2_state.bw;
-            /*cmp::max(
-                r.bbr2_state.bw,
-                r.bbr2_state.probe_rtt_min_delay.as_secs()
-                    * r.bbr2_state.min_rtt.as_secs()
-                    * r.bbr2_state.cwnd_gain as u64,
-            );*/
-            println!("---bbr2 old cwnd: {:?}", r.congestion_window);
-            r.congestion_window = new_cwnd as usize;
+      
+            r.bbr2_state.pacing_rate =
+                cmp::max(nominal_pacing_rate,  r.bbr2_state.probing_rate);
+            //let new_cwnd = cmp::max(
+            //    r.bbr2_state.bw,
+            //    r.bbr2_state.probe_rtt_min_delay.as_secs()
+            //        * r.bbr2_state.min_rtt.as_secs()
+            //        * r.bbr2_state.cwnd_gain as u64,
+            //);
+            //println!("---bbr2 old cwnd: {:?}", r.congestion_window);
+            //r.congestion_window = new_cwnd as usize;
             //println!("----bbr2 new cwnd: {:?}",r.congestion_window);
             r.bbr2_state.careful_resume_rounds = r.bbr2_state.round_count;
         }

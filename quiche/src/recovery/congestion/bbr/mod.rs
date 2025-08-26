@@ -202,6 +202,8 @@ pub struct State {
 
     // reset carefully_resuming to false, 2 rounds after it started
     careful_resume_rounds: u64,
+
+    probing_rate: u64,
 }
 
 impl State {
@@ -268,6 +270,7 @@ impl State {
             carefully_resuming: false,
 
             careful_resume_rounds: 0,
+            probing_rate: 0,
         }
     }
 }
@@ -342,9 +345,12 @@ fn congestion_event(
     largest_lost_pkt: &Sent, now: Instant,
 ) {
     r.bbr_state.newly_lost_bytes = lost_bytes;
-    if r.bbr_state.carefully_resuming{
+    if r.bbr_state.carefully_resuming {
         println!("---------congestion event in mod.rs detected, switching to drain state!!!------------");
-        r.bbr_state.state=BBRStateMachine::Drain;
+        r.bbr_state.state = BBRStateMachine::Drain;
+        r.resume.change_state(own_resume::CrState::SafeRetreat(
+            largest_lost_pkt.pkt_num,
+        ));
     }
     // Upon entering Fast Recovery.
     if !r.in_congestion_recovery(largest_lost_pkt.time_sent) {
