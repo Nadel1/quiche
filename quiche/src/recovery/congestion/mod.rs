@@ -303,6 +303,12 @@ impl Congestion {
                 }
             },
             own_resume::CrState::Unvalidated(_) => {
+                let now = Instant::now();
+                if now - self.resume.get_state_timer() > rtt_stats.latest_rtt {
+                    self.resume.change_state(own_resume::CrState::Validating(
+                        pkt.pkt_num,
+                    ));
+                }
                 if !(self.cc_ops.has_custom_pacing)()
                     && rtt_stats.has_first_rtt_sample
                 {

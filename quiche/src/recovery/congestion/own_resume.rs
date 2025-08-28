@@ -2,7 +2,7 @@
 
 use crate::recovery::congestion::Acked;
 use std::{
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
     u64,
 };
 //write back saved cc params to file
@@ -26,6 +26,7 @@ pub enum CrState {
 }
 //TODO: add deleted qlog metrics back in
 pub struct OwnResume {
+    in_state_timer: Instant,
     trace_id: String,
     enabled: bool,
     cr_state: CrState,
@@ -59,6 +60,7 @@ impl OwnResume {
         let mut saved_time = Duration::ZERO;
         if Path::new(SAVED_CC_FILE).exists() {
             let file_contents = fs::read_to_string(file_name).unwrap();
+            
             let file_array: Vec<&str> = file_contents.split(',').collect();
             if file_array.len() > 1 {
                 let rtt_string = file_array[1];
@@ -99,6 +101,7 @@ impl OwnResume {
         }
 
         Self {
+            in_state_timer: Instant::now(),
             trace_id: trace_id.to_string(),
             enabled,
             cr_state: CrState::default(),
@@ -145,6 +148,10 @@ impl OwnResume {
     }
     pub fn get_jump_cwnd(&self) -> usize {
         self.jump_cwnd
+    }
+
+    pub fn get_state_timer(&self) -> Instant {
+        self.in_state_timer
     }
     // Returns (new_cwnd, new_ssthresh), both optional
     pub fn process_ack(
