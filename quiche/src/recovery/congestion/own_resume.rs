@@ -152,7 +152,7 @@ impl OwnResume {
         _iw_acked: bool,
     ) -> (Option<usize>, Option<usize>) {
         println!("in process ack!!");
-        self.total_acked += packet.size;
+        self.total_acked += 1; // this was used by the other implementation: packet.size; but doesnt make too much sense here: after all the iw is saved in packets not bytes
         match self.cr_state {
             CrState::Unvalidated(first_packet) => {
                 self.pipesize += packet.size;
@@ -304,4 +304,3 @@ impl OwnResume {
         }
     }
 }
-
