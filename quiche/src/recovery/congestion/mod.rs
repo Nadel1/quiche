@@ -241,11 +241,18 @@ impl Congestion {
             let mut saved_rtt = self.resume.get_saved_rtt();
 
             if saved_rtt > rtt_stats.rtt().as_secs() {
-                saved_rtt = rtt_stats.smoothed_rtt.as_secs();
+
+                println!("new saved rtt! was: {:?}, will be {:?}",saved_rtt,rtt_stats.rtt().as_secs());
+                if rtt_stats.rtt().as_secs()==2{
+                    println!("--------------HERE--------------------");
+                }
+                saved_rtt = rtt_stats.rtt().as_secs();
+                self.resume.set_saved_rtt(saved_rtt);
             }
 
-            if saved_cwnd < self.delivery_rate.delivered() as f64 {
-                saved_cwnd = self.delivery_rate.delivered() as f64;
+            if saved_cwnd < self.congestion_window() as f64 {
+                
+                saved_cwnd = self.congestion_window() as f64;
             }
             if saved_cwnd > (4 * self.initial_congestion_window) as f64 {
                 self.write_params_to_file(saved_rtt, saved_cwnd as usize);
