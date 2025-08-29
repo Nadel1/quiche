@@ -241,9 +241,12 @@ impl Congestion {
             let mut saved_rtt = self.resume.get_saved_rtt();
 
             if saved_rtt > rtt_stats.rtt().as_secs() {
-
-                println!("new saved rtt! was: {:?}, will be {:?}",saved_rtt,rtt_stats.rtt().as_secs());
-                if rtt_stats.rtt().as_secs()==2{
+                println!(
+                    "new saved rtt! was: {:?}, will be {:?}",
+                    saved_rtt,
+                    rtt_stats.rtt().as_secs()
+                );
+                if rtt_stats.rtt().as_secs() == 2 {
                     println!("--------------HERE--------------------");
                 }
                 saved_rtt = rtt_stats.rtt().as_secs();
@@ -251,7 +254,6 @@ impl Congestion {
             }
 
             if saved_cwnd < self.congestion_window() as f64 {
-                
                 saved_cwnd = self.congestion_window() as f64;
             }
             if saved_cwnd > (4 * self.initial_congestion_window) as f64 {
@@ -311,11 +313,17 @@ impl Congestion {
             },
             own_resume::CrState::Unvalidated(_) => {
                 let now = Instant::now();
-                if now - self.resume.get_state_timer() > rtt_stats.latest_rtt {
-                    self.resume.change_state(own_resume::CrState::Validating(
+                if now - self.resume.get_state_timer() > rtt_stats.latest_rtt
+                    || bytes_in_flight / self.max_datagram_size
+                        >= self.congestion_window
+                {
+                    self.congestion_window = self.resume.check_flight_size(
+                        bytes_in_flight,
+                        self.congestion_window(),
                         pkt.pkt_num,
-                    ));
+                    );
                 }
+
                 if !(self.cc_ops.has_custom_pacing)()
                     && rtt_stats.has_first_rtt_sample
                 {

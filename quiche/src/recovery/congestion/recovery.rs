@@ -36,6 +36,7 @@ use super::Sent;
 
 use crate::packet::Epoch;
 use crate::ranges::RangeSet;
+use crate::recovery::congestion::own_resume;
 use crate::recovery::congestion::SsThresh;
 use crate::recovery::Bandwidth;
 use crate::recovery::HandshakeStatus;
@@ -767,8 +768,8 @@ impl RecoveryOps for LegacyRecovery {
                     self.congestion.congestion_window = new_cwnd;
                 }
                 if let Some(new_ssthresh) = new_ssthresh {
-                    let mut new_thresh=SsThresh::default();
-                    new_thresh.update(new_ssthresh, false);//css: would be relevant for hystart, not used outside of it, assume it to be false
+                    let mut new_thresh = SsThresh::default();
+                    new_thresh.update(new_ssthresh, false); //css: would be relevant for hystart, not used outside of it, assume it to be false
                     self.congestion.ssthresh = new_thresh;
                 }
             }
@@ -903,6 +904,22 @@ impl RecoveryOps for LegacyRecovery {
         &mut self, epoch: Epoch, now: Instant, trace_id: &str,
     ) -> (usize, usize) {
         // Time threshold loss detection.
+        if self.congestion.resume.enabled() {
+            let cr_state = self.congestion.resume.get_state();
+            match cr_state {
+                own_resume::CrState::Reconnaissance => {
+                    self.congestion
+                        .resume
+                        .change_state(own_resume::CrState::Normal);
+                },
+                own_resume::CrState::Unvalidated(_) => {
+                    self.congesiton
+                        .resume
+                        .change_state(own_resume::CrState::Normal);
+                },
+                _ => {},
+            }
+        }
         self.detect_lost_packets(epoch, now, trace_id)
     }
 
