@@ -128,6 +128,20 @@ impl OwnResume {
             false
         }
     }
+    pub fn check_flight_size(
+        &mut self,
+        flight_size: usize,
+        initial_window: usize,
+        first_packet: u64,
+    ) -> usize {
+        if flight_size < initial_window || flight_size <= self.pipesize {
+            self.change_state(CrState::Normal);
+            return self.pipesize;
+        } else {
+            self.change_state(CrState::Validating(first_packet));
+            return flight_size;
+        }
+    }
     pub fn get_state(&self) -> CrState {
         self.cr_state
     }
@@ -234,13 +248,6 @@ impl OwnResume {
         }
         match self.cr_state {
             CrState::Reconnaissance => {
-                self.jump_cwnd = self.saved_cwnd / 2;
-                //self.jump_cwnd = cmp::max(MAX_JUMP, self.saved_cwnd / 2); //--> this _would_ be correct following the draft, but it adds roughly 5s to flow completion?
-                println!("-----------jump is: {:?}----------", self.jump_cwnd);
-                if self.jump_cwnd == 0 {
-                    self.change_state(CrState::Normal);
-                    return 0;
-                }
                 //check rtt in recon: path changed or rtt too small?
                 let current_rtt = match rtt_sample {
                     Some(s) => s,
@@ -263,6 +270,13 @@ impl OwnResume {
                 }
                 self.change_state(CrState::Unvalidated(largest_pkt_sent));
                 self.pipesize = cwnd;
+                self.jump_cwnd = self.saved_cwnd / 2;
+                //self.jump_cwnd = cmp::max(MAX_JUMP, self.saved_cwnd / 2); //--> this _would_ be correct following the draft, but it adds roughly 5s to flow completion?
+                println!("-----------jump is: {:?}----------", self.jump_cwnd);
+                if self.jump_cwnd == 0 {
+                    self.change_state(CrState::Normal);
+                    return 0;
+                }
                 return self.jump_cwnd;
             },
 
