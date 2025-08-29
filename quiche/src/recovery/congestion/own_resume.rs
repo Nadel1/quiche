@@ -60,7 +60,7 @@ impl OwnResume {
         let mut saved_time = Duration::ZERO;
         if Path::new(SAVED_CC_FILE).exists() {
             let file_contents = fs::read_to_string(file_name).unwrap();
-            
+
             let file_array: Vec<&str> = file_contents.split(',').collect();
             if file_array.len() > 1 {
                 let rtt_string = file_array[1];
@@ -117,8 +117,6 @@ impl OwnResume {
 
     pub fn enabled(&mut self) -> bool {
         if self.enabled {
-            println!("is enabled,state is {:?}", self.cr_state);
-
             self.cr_state != CrState::Normal
             //true
         } else {
@@ -148,6 +146,10 @@ impl OwnResume {
     }
     pub fn get_jump_cwnd(&self) -> usize {
         self.jump_cwnd
+    }
+
+    pub fn set_saved_rtt(&mut self, new_rtt: u64) {
+        self.saved_rtt = Duration::from_secs(new_rtt)
     }
 
     pub fn get_state_timer(&self) -> Instant {
