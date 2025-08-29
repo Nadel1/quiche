@@ -269,6 +269,7 @@ impl OwnResume {
                     self.change_state(CrState::Normal);
                 }
                 self.change_state(CrState::Unvalidated(largest_pkt_sent));
+                self.in_state_timer=Instant::now();
                 self.pipesize = cwnd;
                 self.jump_cwnd = self.saved_cwnd / 2;
                 //self.jump_cwnd = cmp::max(MAX_JUMP, self.saved_cwnd / 2); //--> this _would_ be correct following the draft, but it adds roughly 5s to flow completion?
@@ -301,6 +302,7 @@ impl OwnResume {
 
                 self.change_state(CrState::SafeRetreat(largest_pkt_sent));
                 self.pipesize / 2
+                
             },
             CrState::Validating(_) => {
                 println!("{} congestion during validating phase", self.trace_id);

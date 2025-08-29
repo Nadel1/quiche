@@ -246,9 +246,6 @@ impl Congestion {
                     saved_rtt,
                     rtt_stats.rtt().as_secs()
                 );
-                if rtt_stats.rtt().as_secs() == 2 {
-                    println!("--------------HERE--------------------");
-                }
                 saved_rtt = rtt_stats.rtt().as_secs();
                 self.resume.set_saved_rtt(saved_rtt);
             }
@@ -313,7 +310,8 @@ impl Congestion {
             },
             own_resume::CrState::Unvalidated(_) => {
                 let now = Instant::now();
-                if now - self.resume.get_state_timer() > rtt_stats.latest_rtt
+
+                if now - self.resume.get_state_timer() > rtt_stats.latest_rtt()
                     || bytes_in_flight / self.max_datagram_size
                         >= self.congestion_window
                 {
