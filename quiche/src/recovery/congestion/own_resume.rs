@@ -300,7 +300,7 @@ impl OwnResume {
                 //    self.pipesize / 2
 
                 self.change_state(CrState::SafeRetreat(largest_pkt_sent));
-                0
+                self.pipesize / 2
             },
             CrState::Validating(_) => {
                 println!("{} congestion during validating phase", self.trace_id);

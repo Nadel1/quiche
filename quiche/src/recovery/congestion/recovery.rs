@@ -913,7 +913,7 @@ impl RecoveryOps for LegacyRecovery {
                         .change_state(own_resume::CrState::Normal);
                 },
                 own_resume::CrState::Unvalidated(_) => {
-                    self.congesiton
+                    self.congestion
                         .resume
                         .change_state(own_resume::CrState::Normal);
                 },
