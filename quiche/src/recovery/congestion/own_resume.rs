@@ -91,6 +91,7 @@ impl OwnResume {
                     SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
                 if current_time - saved_time > PARAMS_MAXIMUM_GAP {
                     //abort
+                    println!("Saved parameters found, but outdated, abort CR!");
                     enabled = false;
                 }
             } else {
@@ -118,9 +119,7 @@ impl OwnResume {
     pub fn enabled(&mut self) -> bool {
         if self.enabled {
             self.cr_state != CrState::Normal
-            //true
         } else {
-            println!("not enabled");
             if self.cr_state != CrState::Normal {
                 self.change_state(CrState::Normal);
             }
@@ -129,10 +128,7 @@ impl OwnResume {
         }
     }
     pub fn check_flight_size(
-        &mut self,
-        flight_size: usize,
-        initial_window: usize,
-        first_packet: u64,
+        &mut self, flight_size: usize, initial_window: usize, first_packet: u64,
     ) -> usize {
         if flight_size < initial_window || flight_size <= self.pipesize {
             self.change_state(CrState::Normal);
@@ -174,7 +170,6 @@ impl OwnResume {
         &mut self, largest_pkt_sent: u64, packet: &Acked, flightsize: usize,
         _iw_acked: bool,
     ) -> (Option<usize>, Option<usize>) {
-        println!("in process ack!!");
         self.total_acked += 1; // this was used by the other implementation: packet.size; but doesnt make too much sense here: after all the iw is saved in packets not bytes
         match self.cr_state {
             CrState::Unvalidated(first_packet) => {
@@ -183,8 +178,7 @@ impl OwnResume {
                     if flightsize <= self.pipesize {
                         trace!("{} careful resume complete", self.trace_id);
                         self.change_state(
-                            CrState::Normal,
-                            // CarefulResumeTrigger::LastUnvalidatedPacketAcknowledged,
+                            CrState::Normal
                         );
                         (Some(self.pipesize), None)
                     } else {
@@ -194,8 +188,7 @@ impl OwnResume {
                         );
                         // Store the last packet number that was sent in the Unvalidated Phase
                         self.change_state(
-                            CrState::Validating(largest_pkt_sent),
-                            // CarefulResumeTrigger::FirstUnvalidatedPacketAcknowledged,
+                            CrState::Validating(largest_pkt_sent)
                         );
                         (Some(flightsize), None)
                     }
@@ -269,11 +262,10 @@ impl OwnResume {
                     self.change_state(CrState::Normal);
                 }
                 self.change_state(CrState::Unvalidated(largest_pkt_sent));
-                self.in_state_timer=Instant::now();
+                self.in_state_timer = Instant::now();
                 self.pipesize = cwnd;
                 self.jump_cwnd = self.saved_cwnd / 2;
                 //self.jump_cwnd = cmp::max(MAX_JUMP, self.saved_cwnd / 2); //--> this _would_ be correct following the draft, but it adds roughly 5s to flow completion?
-                println!("-----------jump is: {:?}----------", self.jump_cwnd);
                 if self.jump_cwnd == 0 {
                     self.change_state(CrState::Normal);
                     return 0;
@@ -290,38 +282,16 @@ impl OwnResume {
         match self.cr_state {
             CrState::Unvalidated(_) => {
                 println!("{} congestion during unvalidated phase", self.trace_id);
-
-                // TODO: mark used CR parameters as invalid for future connections
-
-                //if self.use_sr {
-                //    self.change_state(
-                //        CrState::SafeRetreat(largest_pkt_sent),
-                //        CarefulResumeTrigger::PacketLoss,
-                //    );
-                //    self.pipesize / 2
-
                 self.change_state(CrState::SafeRetreat(largest_pkt_sent));
                 self.pipesize / 2
-                
             },
             CrState::Validating(_) => {
                 println!("{} congestion during validating phase", self.trace_id);
-
-                // TODO: mark used CR parameters as invalid for future connections
-
-                //if self.use_sr {
-                //    self.change_state(
-                //        CrState::SafeRetreat(p),
-                //        CarefulResumeTrigger::PacketLoss,
-                //    );
-                //    self.pipesize / 2
-
                 self.change_state(CrState::Normal);
                 0
             },
             CrState::Reconnaissance => {
-                println!("-----{} congestion during reconnaissance - abandoning careful resume-----", self.trace_id);
-
+                println!("{} congestion during validating phase", self.trace_id);
                 self.change_state(CrState::Normal);
                 0
             },

@@ -908,11 +908,13 @@ impl RecoveryOps for LegacyRecovery {
             let cr_state = self.congestion.resume.get_state();
             match cr_state {
                 own_resume::CrState::Reconnaissance => {
+                    println!("Path changed, aborting CR!");
                     self.congestion
                         .resume
                         .change_state(own_resume::CrState::Normal);
                 },
                 own_resume::CrState::Unvalidated(_) => {
+                    println!("Path changed, aborting CR!");
                     self.congestion
                         .resume
                         .change_state(own_resume::CrState::Normal);
