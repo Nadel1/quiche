@@ -392,8 +392,6 @@ use std::convert::TryInto;
 
 use std::fs::File;
 use std::net::SocketAddr;
-use std::path::Path;
-
 use std::str::FromStr;
 
 use std::sync::Arc;
@@ -2212,18 +2210,15 @@ impl<F: BufFactory> Connection<F> {
             "-------------------create new logging file {:?}-----------",
             config.logging_name
         );
-        if Path::new(&config.logging_name).exists() {
-            println!("Logging file already exists!");
-        } else {
-            File::create(config.logging_name.clone()).unwrap();
-            use std::io::Write;//has to be included here, otherwise issues with other write calls
-            let mut file = File::options()
-                .append(true)
-                .open(config.logging_name.clone())
-                .unwrap();
-            let save_string = "TIMESTAMP,PACKET_NUM,PACKET_SIZE,CWND\n";
-            let _ = file.write_all(save_string.as_bytes());
-        }
+
+        File::create(config.logging_name.clone()).unwrap();
+        use std::io::Write; //has to be included here, otherwise issues with other write calls
+        let mut file = File::options()
+            .append(true)
+            .open(config.logging_name.clone())
+            .unwrap();
+        let save_string = "TIMESTAMP,PACKET_NUM,PACKET_SIZE,CWND\n";
+        let _ = file.write_all(save_string.as_bytes());
 
         if let Some(odcid) = odcid {
             conn.local_transport_params
