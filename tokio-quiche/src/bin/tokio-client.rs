@@ -9,11 +9,9 @@ use tokio_quiche::http3::driver::{
 use tokio_quiche::http3::settings::Http3Settings;
 use tokio_quiche::quic::ConnectionShutdownBehaviour;
 use tokio_quiche::quiche::h3;
-use tokio_quiche::ClientH3Driver;
 use tokio_quiche::settings::QuicSettings;
+use tokio_quiche::ClientH3Driver;
 use tokio_quiche::ConnectionParams;
-
-
 
 #[tokio::main]
 async fn main() -> tokio_quiche::QuicResult<()> {
@@ -21,7 +19,6 @@ async fn main() -> tokio_quiche::QuicResult<()> {
     let conn_args = CommonArgs::with_docopt(&docopt);
     let args = ClientArgs::with_docopt(&docopt);
     // Create the configuration for the QUIC connection.
-
 
     // We'll only connect to the first server provided in URL list.
     let connect_url = &args.urls[0];
@@ -49,28 +46,30 @@ async fn main() -> tokio_quiche::QuicResult<()> {
     println!("Args method: {:?}", &args.dump_response_path);
     socket.connect(peer_addr).await?;
 
-    let settings=QuicSettings::default();
-    let mut params = ConnectionParams::new_client(
-        settings,
-        None,
-        Default::default(),
-    );
+    let settings = QuicSettings::default();
+    let mut params =
+        ConnectionParams::new_client(settings, None, Default::default());
+
 
     params.settings.initial_rtt = Some(conn_args.initial_rtt);
-    params.settings.logging_name= "client_log.csv".to_string();
+    params.settings.logging_name = conn_args.logging_name;
     params.settings.max_idle_timeout =
         Some(Duration::from_millis(conn_args.idle_timeout));
-    params.settings.cc_algorithm=conn_args.cc_algorithm;
-    params.settings.initial_congestion_window_packets = conn_args.initial_cwnd_packets.try_into().unwrap();
+    params.settings.cc_algorithm = conn_args.cc_algorithm;
+    params.settings.initial_congestion_window_packets =
+        conn_args.initial_cwnd_packets.try_into().unwrap();
     let (h3_driver, mut controller) =
         ClientH3Driver::new(Http3Settings::default());
     let socket = socket.try_into()?;
 
     println!("Path is: {:?}", file);
-    println!("-------in main, logging file is {:?}-----",params.settings.logging_name);
-    let mut quic_connection=tokio_quiche::quic::connect_with_config(socket, None,&params, h3_driver)
-        .await?;
-
+    println!(
+        "-------in main, logging file is {:?}-----",
+        params.settings.logging_name
+    );
+    let mut quic_connection =
+        tokio_quiche::quic::connect_with_config(socket, None, &params, h3_driver)
+            .await?;
 
     for _i in 0..args.reqs_cardinal {
         controller
@@ -139,19 +138,19 @@ async fn main() -> tokio_quiche::QuicResult<()> {
         }
     }
     quic_connection.shutdown_connection().await?;
-    let send_application_close=true;
-    let error_code=0;
-    let reason=Vec::new();
-    let behaviour=ConnectionShutdownBehaviour {
+    let send_application_close = true;
+    let error_code = 0;
+    let reason = Vec::new();
+    let behaviour = ConnectionShutdownBehaviour {
         send_application_close,
         error_code,
         reason,
     };
 
-    let _=controller
+    let _ = controller
         .cmd_sender()
         .send(tokio_quiche::quic::QuicCommand::ConnectionClose(behaviour));
     println!("connection close client!");
-    
+
     Ok(())
 }
