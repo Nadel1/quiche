@@ -57,7 +57,7 @@ async fn main() -> tokio_quiche::QuicResult<()> {
     );
 
     params.settings.initial_rtt = Some(conn_args.initial_rtt);
-    params.settings.logging_name= "client.csv".to_string();
+    params.settings.logging_name= "client_log.csv".to_string();
     params.settings.max_idle_timeout =
         Some(Duration::from_millis(conn_args.idle_timeout));
     params.settings.cc_algorithm=conn_args.cc_algorithm;
