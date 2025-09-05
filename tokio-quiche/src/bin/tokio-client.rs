@@ -63,10 +63,7 @@ async fn main() -> tokio_quiche::QuicResult<()> {
     let socket = socket.try_into()?;
 
     println!("Path is: {:?}", file);
-    println!(
-        "-------in main, logging file is {:?}-----",
-        params.settings.logging_name
-    );
+
     let mut quic_connection =
         tokio_quiche::quic::connect_with_config(socket, None, &params, h3_driver)
             .await?;
