@@ -400,6 +400,8 @@ use std::sync::Arc;
 
 use std::time::Duration;
 use std::time::Instant;
+use std::time::SystemTime;
+use std::time::UNIX_EPOCH;
 
 #[cfg(feature = "qlog")]
 use qlog::events::connectivity::ConnectivityEventType;
@@ -2280,6 +2282,19 @@ impl<F: BufFactory> Connection<F> {
         self.set_qlog_with_level(writer, title, description, QlogLevel::Base)
     }
 
+    pub fn write_to_log(&self, pkt_num: u64, pkt_size: usize, cwnd: usize) {
+        use std::io::Write;
+        let mut file = File::options().append(true).open(self.logging_name.clone()).unwrap();
+        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH);
+        let mut save_string=timestamp.unwrap().as_secs().to_string().to_owned();
+        save_string.push_str(",");
+        save_string.push_str(&pkt_num.to_string());
+        save_string.push_str(",");
+        save_string.push_str(&pkt_size.to_string());
+        save_string.push_str(",");
+        save_string.push_str(&cwnd.to_string());
+        let _ = file.write_all(save_string.as_bytes());
+    }
     /// Sets qlog output to the designated [`Writer`].
     ///
     /// Only qlog events included in the specified `QlogLevel` are written. The
@@ -5179,9 +5194,10 @@ impl<F: BufFactory> Connection<F> {
         now: Instant,
     ) -> Result<()> {
         let path = self.paths.get_mut(send_pid)?;
-        // TODO: implement logging
         // It's fine to set the skip counter based on a non-active path's values.
         let cwnd = path.recovery.cwnd();
+        let packet_size=sent_pkt.size.clone();
+        let packet_num=sent_pkt.pkt_num.clone();
         let max_datagram_size = path.recovery.max_datagram_size();
         self.pkt_num_spaces[epoch].on_packet_sent(&sent_pkt);
         self.pkt_num_manager.on_packet_sent(
@@ -5198,6 +5214,7 @@ impl<F: BufFactory> Connection<F> {
             &self.trace_id,
         );
 
+        self.write_to_log(packet_num, packet_size, cwnd);
         Ok(())
     }
 
