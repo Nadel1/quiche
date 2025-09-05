@@ -53,6 +53,7 @@ pub(crate) struct Config {
     pub handshake_timeout: Option<Duration>,
     pub has_ippktinfo: bool,
     pub has_ipv6pktinfo: bool,
+    pub logging_name: String,
 }
 
 impl AsMut<quiche::Config> for Config {
@@ -92,6 +93,10 @@ impl Config {
         #[cfg(feature = "gcongestion")]
         let pacing_offload = quic_settings.enable_pacing && pacing_offload;
 
+        println!(
+            "---setting log name {:?}-----",
+            quic_settings.logging_name.clone()
+        );
         Ok(Config {
             quiche_config: make_quiche_config(params, keylog_file.is_some())?,
             disable_client_ip_validation: quic_settings
@@ -106,6 +111,7 @@ impl Config {
             handshake_timeout: quic_settings.handshake_timeout,
             has_ippktinfo,
             has_ipv6pktinfo,
+            logging_name: quic_settings.logging_name.clone(),
         })
     }
 }
@@ -196,6 +202,7 @@ fn make_quiche_config(
 
     config.set_initial_rtt(quic_settings.initial_rtt.unwrap());
 
+    config.set_log_name(params.settings.logging_name.clone());
 
     if let Some(track_unknown_transport_params) =
         quic_settings.track_unknown_transport_parameters

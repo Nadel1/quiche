@@ -55,7 +55,9 @@ async fn main() -> tokio_quiche::QuicResult<()> {
         None,
         Default::default(),
     );
+
     params.settings.initial_rtt = Some(conn_args.initial_rtt);
+    params.settings.logging_name= "client.csv".to_string();
     params.settings.max_idle_timeout =
         Some(Duration::from_millis(conn_args.idle_timeout));
     params.settings.cc_algorithm=conn_args.cc_algorithm;
@@ -65,6 +67,7 @@ async fn main() -> tokio_quiche::QuicResult<()> {
     let socket = socket.try_into()?;
 
     println!("Path is: {:?}", file);
+    println!("-------in main, logging file is {:?}-----",params.settings.logging_name);
     let mut quic_connection=tokio_quiche::quic::connect_with_config(socket, None,&params, h3_driver)
         .await?;
 

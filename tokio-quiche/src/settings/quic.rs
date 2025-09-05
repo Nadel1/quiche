@@ -298,6 +298,9 @@ pub struct QuicSettings {
     /// Make initial rtt configurable
     #[serde(default = "QuicSettings::default_initial_rtt")]
     pub initial_rtt: Option<Duration>,
+
+    #[serde(default = "QuicSettings::default_logging_name")]
+    pub logging_name: String,
 }
 
 impl QuicSettings {
@@ -422,6 +425,11 @@ impl QuicSettings {
     fn default_initial_rtt() -> Option<Duration> {
         Some(Duration::from_secs(30))
     }
+    #[inline]
+    fn default_logging_name() -> String {
+        "default_log.csv".to_string()
+    }
+
 }
 
 #[cfg(test)]

@@ -308,6 +308,7 @@ Options:
   --initial-rtt MILLIS     The initial RTT in milliseconds [default: 333].
   --initial-cwnd-packets PACKETS   The initial congestion window size in terms of packet count [default: 10].
   --max-ack-delay MILLIS   Max ack delay
+  --logging-name           name of log file
   -h --help                Show this screen.
 ";
 
@@ -328,6 +329,7 @@ pub struct ClientArgs {
     pub source_port: u16,
     pub perform_migration: bool,
     pub send_priority_update: bool,
+    pub logging_name:String,
 }
 
 impl Args for ClientArgs {
@@ -405,6 +407,8 @@ impl Args for ClientArgs {
 
         let send_priority_update = args.get_bool("--send-priority-update");
 
+        let logging_name=args.get_str("--logging-file").to_string();
+
         ClientArgs {
             version,
             dump_response_path,
@@ -421,6 +425,7 @@ impl Args for ClientArgs {
             source_port,
             perform_migration,
             send_priority_update,
+            logging_name,
         }
     }
 }
@@ -443,6 +448,7 @@ impl Default for ClientArgs {
             source_port: 0,
             perform_migration: false,
             send_priority_update: false,
+            logging_name: "client.csv".to_string(),
         }
     }
 }
