@@ -198,7 +198,9 @@ where
     Rx: DatagramSocketRecv + Unpin + 'static,
     App: ApplicationOverQuic,
 {
+    println!("-----in connect-with-config, logging file is: {:?}-----",params.settings.logging_name);
     let mut client_config = Config::new(params, socket.capabilities)?;
+    println!("-----in connect-with-config, client_config logging file is: {:?}",client_config.logging_name);
     let scid = SimpleConnectionIdGenerator.new_connection_id(0);
 
     #[cfg(feature = "zero-copy")]

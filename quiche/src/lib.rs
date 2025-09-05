@@ -848,6 +848,8 @@ pub struct Config {
     track_unknown_transport_params: Option<usize>,
 
     initial_rtt: Duration,
+
+    logging_name: String
 }
 
 // See https://quicwg.org/base-drafts/rfc9000.html#section-15
@@ -922,6 +924,7 @@ impl Config {
 
             track_unknown_transport_params: None,
             initial_rtt: DEFAULT_INITIAL_RTT,
+            logging_name:"test.csv".to_string()
         })
     }
 
@@ -1129,6 +1132,10 @@ impl Config {
     /// The default value is `333`.
     pub fn set_initial_rtt(&mut self, v: Duration) {
         self.local_transport_params.initial_rtt = v;
+    }
+
+    pub fn set_log_name(&mut self, v:String){
+        self.logging_name=v;
     }
 
     /// Sets the `max_idle_timeout` transport parameter, in milliseconds.
@@ -1680,6 +1687,8 @@ where
 
     /// The anti-amplification limit factor.
     max_amplification_factor: usize,
+
+    logging_name:String,
 }
 
 /// Creates a new server-side connection.
@@ -1749,8 +1758,9 @@ pub fn connect(
     server_name: Option<&str>, scid: &ConnectionId, local: SocketAddr,
     peer: SocketAddr, config: &mut Config,
 ) -> Result<Connection> {
+    println!("----in connect, logging name is: {:?}-----",config.logging_name);
     let mut conn = Connection::new(scid, None, local, peer, config, false)?;
-
+    
     if let Some(server_name) = server_name {
         conn.handshake.set_host_name(server_name)?;
     }
@@ -1964,6 +1974,7 @@ impl<F: BufFactory> Connection<F> {
         scid: &ConnectionId, odcid: Option<&ConnectionId>, local: SocketAddr,
         peer: SocketAddr, config: &mut Config, is_server: bool,
     ) -> Result<Connection<F>> {
+        println!("-----------creating new connection in lib, logging name is {:?}-------------------------",config.logging_name);
         let tls = config.tls_ctx.new_handshake()?;
         Connection::with_tls(scid, odcid, local, peer, config, tls, is_server)
     }
@@ -2170,8 +2181,10 @@ impl<F: BufFactory> Connection<F> {
             stopped_stream_remote_count: 0,
 
             max_amplification_factor: config.max_amplification_factor,
+            logging_name:config.logging_name.clone(),
         };
 
+        println!("-------------------create new logging file {:?}-----------",config.logging_name);
         if let Some(odcid) = odcid {
             conn.local_transport_params
                 .original_destination_connection_id = Some(odcid.to_vec().into());
@@ -5148,7 +5161,7 @@ impl<F: BufFactory> Connection<F> {
         now: Instant,
     ) -> Result<()> {
         let path = self.paths.get_mut(send_pid)?;
-
+        // TODO: implement logging
         // It's fine to set the skip counter based on a non-active path's values.
         let cwnd = path.recovery.cwnd();
         let max_datagram_size = path.recovery.max_datagram_size();
