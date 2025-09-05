@@ -31,6 +31,7 @@ async fn main() -> tokio_quiche::QuicResult<()> {
     settings.max_idle_timeout =
         Some(Duration::from_millis(conn_args.idle_timeout));
     settings.initial_rtt = Some(conn_args.initial_rtt);
+    settings.logging_name= "server_log.csv".to_string();
     settings.disable_client_ip_validation = args.no_retry;
     settings.cc_algorithm = conn_args.cc_algorithm;
     settings.initial_congestion_window_packets = conn_args.initial_cwnd_packets.try_into().unwrap();
