@@ -61,7 +61,8 @@ pub struct CommonArgs {
     pub qpack_max_table_capacity: Option<u64>,
     pub qpack_blocked_streams: Option<u64>,
     pub initial_rtt: Duration,
-    pub initial_cwnd_packets: u64
+    pub initial_cwnd_packets: u64,
+    pub logging_name: String,
 }
 
 /// Creates a new `CommonArgs` structure using the provided [`Docopt`].
@@ -154,6 +155,7 @@ impl Args for CommonArgs {
         let no_grease = args.get_bool("--no-grease");
 
         let cc_algorithm = args.get_str("--cc-algorithm");
+        println!("----cc algorithm in args is {:?}------",cc_algorithm);
 
         let disable_hystart = args.get_bool("--disable-hystart");
 
@@ -206,6 +208,9 @@ impl Args for CommonArgs {
             .parse::<u64>()
             .unwrap();
 
+        
+        let logging_name = args.get_str("--logging-file");
+        println!("----logging name in args is {:?}-----",logging_name);
         CommonArgs {
             alpns,
             max_data,
@@ -229,7 +234,8 @@ impl Args for CommonArgs {
             qpack_max_table_capacity,
             qpack_blocked_streams,
             initial_rtt,
-            initial_cwnd_packets
+            initial_cwnd_packets,
+            logging_name: logging_name.to_string(),
         }
     }
 }
@@ -259,7 +265,8 @@ impl Default for CommonArgs {
             qpack_max_table_capacity: None,
             qpack_blocked_streams: None,
             initial_rtt: Duration::from_millis(333),
-            initial_cwnd_packets: 10
+            initial_cwnd_packets: 10,
+            logging_name: "default.csv".to_string(),
         }
     }
 }
@@ -308,8 +315,9 @@ Options:
   --initial-rtt MILLIS     The initial RTT in milliseconds [default: 333].
   --initial-cwnd-packets PACKETS   The initial congestion window size in terms of packet count [default: 10].
   --max-ack-delay MILLIS   Max ack delay
-  --logging-name           name of log file
+  --logging-file FILE      Log file name
   -h --help                Show this screen.
+  
 ";
 
 /// Application-specific arguments that compliment the `CommonArgs`.
@@ -329,7 +337,7 @@ pub struct ClientArgs {
     pub source_port: u16,
     pub perform_migration: bool,
     pub send_priority_update: bool,
-    pub logging_name:String,
+    pub logging_name: String,
 }
 
 impl Args for ClientArgs {
@@ -407,7 +415,8 @@ impl Args for ClientArgs {
 
         let send_priority_update = args.get_bool("--send-priority-update");
 
-        let logging_name=args.get_str("--logging-file").to_string();
+        let logging_name = args.get_str("--logging-file").to_string();
+        println!("Logging name is {:?}",logging_name);
 
         ClientArgs {
             version,
@@ -491,7 +500,9 @@ Options:
   --initial-rtt MILLIS     The initial RTT in milliseconds [default: 333].
   --initial-cwnd-packets PACKETS      The initial congestion window size in terms of packet count [default: 10].
   --max-ack-delay MILLIS      Max ack delay
+  --logging-file FILE         Log file namec
   -h --help                   Show this screen.
+  
 ";
 
 // Application-specific arguments that compliment the `CommonArgs`.
@@ -505,6 +516,7 @@ pub struct ServerArgs {
     pub disable_gso: bool,
     pub disable_pacing: bool,
     pub enable_pmtud: bool,
+    pub logging_name: String,
 }
 
 impl Args for ServerArgs {
@@ -521,6 +533,8 @@ impl Args for ServerArgs {
         let disable_pacing = args.get_bool("--disable-pacing");
         let enable_pmtud = args.get_bool("--enable-pmtud");
 
+        let logging_name = args.get_str("--logging-file").to_string();
+
         ServerArgs {
             listen,
             no_retry,
@@ -531,6 +545,7 @@ impl Args for ServerArgs {
             disable_gso,
             disable_pacing,
             enable_pmtud,
+            logging_name
         }
     }
 }
