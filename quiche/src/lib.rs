@@ -1141,6 +1141,7 @@ impl Config {
         self.local_transport_params.initial_rtt = v;
     }
 
+    /// Sets the log file name
     pub fn set_log_name(&mut self, v: String) {
         self.logging_name = v;
     }
@@ -2202,6 +2203,13 @@ impl<F: BufFactory> Connection<F> {
             println!("Logging file already exists!");
         } else {
             File::create(config.logging_name.clone()).unwrap();
+            use std::io::Write;//has to be included here, otherwise issues with other write calls
+            let mut file = File::options()
+                .append(true)
+                .open(config.logging_name.clone())
+                .unwrap();
+            let save_string = "TIMESTAMP,PACKET_NUM,PACKET_SIZE,CWND\n";
+            let _ = file.write_all(save_string.as_bytes());
         }
 
         if let Some(odcid) = odcid {
@@ -2284,15 +2292,19 @@ impl<F: BufFactory> Connection<F> {
 
     pub fn write_to_log(&self, pkt_num: u64, pkt_size: usize, cwnd: usize) {
         use std::io::Write;
-        let mut file = File::options().append(true).open(self.logging_name.clone()).unwrap();
+        let mut file = File::options()
+            .append(true)
+            .open(self.logging_name.clone())
+            .unwrap();
         let timestamp = SystemTime::now().duration_since(UNIX_EPOCH);
-        let mut save_string=timestamp.unwrap().as_secs().to_string().to_owned();
+        let mut save_string = timestamp.unwrap().as_secs().to_string().to_owned();
         save_string.push_str(",");
         save_string.push_str(&pkt_num.to_string());
         save_string.push_str(",");
         save_string.push_str(&pkt_size.to_string());
         save_string.push_str(",");
         save_string.push_str(&cwnd.to_string());
+        save_string.push_str("\n");
         let _ = file.write_all(save_string.as_bytes());
     }
     /// Sets qlog output to the designated [`Writer`].
@@ -5196,8 +5208,8 @@ impl<F: BufFactory> Connection<F> {
         let path = self.paths.get_mut(send_pid)?;
         // It's fine to set the skip counter based on a non-active path's values.
         let cwnd = path.recovery.cwnd();
-        let packet_size=sent_pkt.size.clone();
-        let packet_num=sent_pkt.pkt_num.clone();
+        let packet_size = sent_pkt.size.clone();
+        let packet_num = sent_pkt.pkt_num.clone();
         let max_datagram_size = path.recovery.max_datagram_size();
         self.pkt_num_spaces[epoch].on_packet_sent(&sent_pkt);
         self.pkt_num_manager.on_packet_sent(
