@@ -855,6 +855,7 @@ pub struct Config {
     initial_rtt: Duration,
 
     logging_name: String,
+    src_ip:String,
 }
 
 // See https://quicwg.org/base-drafts/rfc9000.html#section-15
@@ -930,6 +931,7 @@ impl Config {
             track_unknown_transport_params: None,
             initial_rtt: DEFAULT_INITIAL_RTT,
             logging_name: "test.csv".to_string(),
+            src_ip:"0.0.0.0".to_string(),
         })
     }
 
@@ -2204,7 +2206,7 @@ impl<F: BufFactory> Connection<F> {
             .append(true)
             .open(config.logging_name.clone())
             .unwrap();
-        let save_string = "TIMESTAMP,PACKET_NUM,PACKET_SIZE,CWND\n";
+        let save_string = "TIMESTAMP,SRC_ID,PACKET_NUM,PACKET_SIZE,CWND\n";
         let _ = file.write_all(save_string.as_bytes());
 
         if let Some(odcid) = odcid {
@@ -2293,6 +2295,7 @@ impl<F: BufFactory> Connection<F> {
             .unwrap();
         let timestamp = SystemTime::now().duration_since(UNIX_EPOCH);
         let mut save_string = timestamp.unwrap().as_secs().to_string().to_owned();
+        // TODO: add source and destination ip as command line params
         save_string.push_str(",");
         save_string.push_str(&pkt_num.to_string());
         save_string.push_str(",");
