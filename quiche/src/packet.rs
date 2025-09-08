@@ -622,6 +622,7 @@ pub fn decrypt_hdr(
     first_buf.as_mut()[0] = first;
 
     hdr.pkt_num = pn;
+    
     hdr.pkt_num_len = pn_len;
 
     if hdr.ty == Type::Short {

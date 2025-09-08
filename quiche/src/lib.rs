@@ -855,7 +855,8 @@ pub struct Config {
     initial_rtt: Duration,
 
     logging_name: String,
-    src_ip:String,
+    src_ip: String,
+    dst_ip: String,
 }
 
 // See https://quicwg.org/base-drafts/rfc9000.html#section-15
@@ -931,7 +932,8 @@ impl Config {
             track_unknown_transport_params: None,
             initial_rtt: DEFAULT_INITIAL_RTT,
             logging_name: "test.csv".to_string(),
-            src_ip:"0.0.0.0".to_string(),
+            src_ip: "0.0.0.0".to_string(),
+            dst_ip: "1.1.1.1".to_string(),
         })
     }
 
@@ -1144,6 +1146,16 @@ impl Config {
     /// Sets the log file name
     pub fn set_log_name(&mut self, v: String) {
         self.logging_name = v;
+    }
+
+    /// Sets source ip, needed for logging
+    pub fn set_src_ip(&mut self, v: String) {
+        self.src_ip = v;
+    }
+
+    /// Sets source ip, needed for logging
+    pub fn set_dst_ip(&mut self, v: String) {
+        self.dst_ip = v;
     }
 
     /// Sets the `max_idle_timeout` transport parameter, in milliseconds.
@@ -2206,7 +2218,7 @@ impl<F: BufFactory> Connection<F> {
             .append(true)
             .open(config.logging_name.clone())
             .unwrap();
-        let save_string = "TIMESTAMP,SRC_ID,PACKET_NUM,PACKET_SIZE,CWND\n";
+        let save_string = "TIMESTAMP,SENT/RECEIVED,PACKET_NUM,PACKET_SIZE,CWND\n";
         let _ = file.write_all(save_string.as_bytes());
 
         if let Some(odcid) = odcid {
@@ -2287,7 +2299,9 @@ impl<F: BufFactory> Connection<F> {
         self.set_qlog_with_level(writer, title, description, QlogLevel::Base)
     }
 
-    pub fn write_to_log(&self, pkt_num: u64, pkt_size: usize, cwnd: usize) {
+    pub fn write_to_log(
+        &self, pkt_num: u64, pkt_size: usize, cwnd: usize, sent: bool,
+    ) {
         use std::io::Write;
         let mut file = File::options()
             .append(true)
@@ -2297,6 +2311,11 @@ impl<F: BufFactory> Connection<F> {
         let mut save_string = timestamp.unwrap().as_secs().to_string().to_owned();
         // TODO: add source and destination ip as command line params
         save_string.push_str(",");
+        if sent {
+            save_string.push_str("SENT,");
+        } else {
+            save_string.push_str("RECEIVED,");
+        }
         save_string.push_str(&pkt_num.to_string());
         save_string.push_str(",");
         save_string.push_str(&pkt_size.to_string());
@@ -2900,7 +2919,7 @@ impl<F: BufFactory> Connection<F> {
         &mut self, buf: &mut [u8], info: &RecvInfo, recv_pid: Option<usize>,
     ) -> Result<usize> {
         let now = Instant::now();
-
+       
         if buf.is_empty() {
             return Err(Error::Done);
         }
@@ -3195,6 +3214,11 @@ impl<F: BufFactory> Connection<F> {
             hdr.pkt_num,
             hdr.pkt_num_len,
         );
+        let path = self.paths.get_mut(recv_pid.unwrap())?;
+        // It's fine to set the skip counter based on a non-active path's values.
+        let cwnd = path.recovery.cwnd();
+
+        self.write_to_log(hdr.pkt_num, payload_len, cwnd, false);
 
         let pn_len = hdr.pkt_num_len;
 
@@ -5224,7 +5248,7 @@ impl<F: BufFactory> Connection<F> {
             &self.trace_id,
         );
 
-        self.write_to_log(packet_num, packet_size, cwnd);
+        self.write_to_log(packet_num, packet_size, cwnd, true);
         Ok(())
     }
 
@@ -7673,6 +7697,16 @@ impl<F: BufFactory> Connection<F> {
         epoch: packet::Epoch, now: Instant,
     ) -> Result<()> {
         trace!("{} rx frm {:?}", self.trace_id, frame);
+
+        let packet_num = hdr.pkt_num;
+        let mut d = [42; 9999];
+        let mut b = octets::OctetsMut::with_slice(&mut d);
+
+        let packet_size = frame.to_bytes(&mut b).unwrap();
+        let path = self.paths.get_mut(recv_path_id)?;
+        // It's fine to set the skip counter based on a non-active path's values.
+        let cwnd = path.recovery.cwnd();
+        //self.write_to_log(packet_num, packet_size, cwnd, false);
 
         match frame {
             frame::Frame::Padding { .. } => (),
