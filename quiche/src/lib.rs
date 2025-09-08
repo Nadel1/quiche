@@ -2919,7 +2919,7 @@ impl<F: BufFactory> Connection<F> {
         &mut self, buf: &mut [u8], info: &RecvInfo, recv_pid: Option<usize>,
     ) -> Result<usize> {
         let now = Instant::now();
-       
+
         if buf.is_empty() {
             return Err(Error::Done);
         }
@@ -3214,11 +3214,6 @@ impl<F: BufFactory> Connection<F> {
             hdr.pkt_num,
             hdr.pkt_num_len,
         );
-        let path = self.paths.get_mut(recv_pid.unwrap())?;
-        // It's fine to set the skip counter based on a non-active path's values.
-        let cwnd = path.recovery.cwnd();
-
-        self.write_to_log(hdr.pkt_num, payload_len, cwnd, false);
 
         let pn_len = hdr.pkt_num_len;
 
@@ -3703,6 +3698,11 @@ impl<F: BufFactory> Connection<F> {
         }
 
         self.ack_eliciting_sent = false;
+        let path = self.paths.get_mut(recv_pid)?;
+        // It's fine to set the skip counter based on a non-active path's values.
+        let cwnd = path.recovery.cwnd();
+
+        self.write_to_log(hdr.pkt_num, read, cwnd, false);
 
         Ok(read)
     }
@@ -5158,7 +5158,7 @@ impl<F: BufFactory> Connection<F> {
             has_data: sent_pkt_has_data,
             is_pmtud_probe,
         };
-
+        let packet_size = written;
         if in_flight && is_app_limited {
             path.recovery.delivery_rate_update_app_limited(true);
         }
@@ -5218,6 +5218,9 @@ impl<F: BufFactory> Connection<F> {
                 .recovery
                 .pmtud_update_max_datagram_size(pmtud.get_current_mtu());
         }
+        let cwnd = active_path.recovery.cwnd();
+
+        self.write_to_log(pn, packet_size, cwnd, true);
 
         Ok((pkt_type, written))
     }
@@ -5230,8 +5233,6 @@ impl<F: BufFactory> Connection<F> {
         let path = self.paths.get_mut(send_pid)?;
         // It's fine to set the skip counter based on a non-active path's values.
         let cwnd = path.recovery.cwnd();
-        let packet_size = sent_pkt.size.clone();
-        let packet_num = sent_pkt.pkt_num.clone();
         let max_datagram_size = path.recovery.max_datagram_size();
         self.pkt_num_spaces[epoch].on_packet_sent(&sent_pkt);
         self.pkt_num_manager.on_packet_sent(
@@ -5248,7 +5249,6 @@ impl<F: BufFactory> Connection<F> {
             &self.trace_id,
         );
 
-        self.write_to_log(packet_num, packet_size, cwnd, true);
         Ok(())
     }
 
@@ -7697,17 +7697,6 @@ impl<F: BufFactory> Connection<F> {
         epoch: packet::Epoch, now: Instant,
     ) -> Result<()> {
         trace!("{} rx frm {:?}", self.trace_id, frame);
-
-        let packet_num = hdr.pkt_num;
-        let mut d = [42; 9999];
-        let mut b = octets::OctetsMut::with_slice(&mut d);
-
-        let packet_size = frame.to_bytes(&mut b).unwrap();
-        let path = self.paths.get_mut(recv_path_id)?;
-        // It's fine to set the skip counter based on a non-active path's values.
-        let cwnd = path.recovery.cwnd();
-        //self.write_to_log(packet_num, packet_size, cwnd, false);
-
         match frame {
             frame::Frame::Padding { .. } => (),
 
