@@ -3737,7 +3737,7 @@ impl<F: BufFactory> Connection<F> {
         // It's fine to set the skip counter based on a non-active path's values.
         let cwnd = path.recovery.cwnd();
 
-        self.write_to_log(hdr.pkt_num, read, cwnd, false);
+        self.write_to_log(pn, read, cwnd, false);
 
         Ok(read)
     }
