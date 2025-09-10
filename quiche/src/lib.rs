@@ -2212,15 +2212,18 @@ impl<F: BufFactory> Connection<F> {
             config.logging_name
         );
 
-        File::create(config.logging_name.clone()).unwrap();
-        use std::io::Write; //has to be included here, otherwise issues with other write calls
-        let mut file = File::options()
-            .append(true)
-            .open(config.logging_name.clone())
-            .unwrap();
-        let save_string = "TIMESTAMP,SENT/RECEIVED,PACKET_NUM,PACKET_SIZE,CWND\n";
-        let _ = file.write_all(save_string.as_bytes());
+        if config.logging_name != "" {
+            File::create(config.logging_name.clone()).unwrap();
 
+            use std::io::Write; //has to be included here, otherwise issues with other write calls
+            let mut file = File::options()
+                .append(true)
+                .open(config.logging_name.clone())
+                .unwrap();
+            let save_string =
+                "TIMESTAMP,SENT/RECEIVED,PACKET_NUM,PACKET_SIZE,CWND\n";
+            let _ = file.write_all(save_string.as_bytes());
+        }
         if let Some(odcid) = odcid {
             conn.local_transport_params
                 .original_destination_connection_id = Some(odcid.to_vec().into());
@@ -2303,6 +2306,9 @@ impl<F: BufFactory> Connection<F> {
         &self, pkt_num: u64, pkt_size: usize, cwnd: usize, sent: bool,
     ) {
         use std::io::Write;
+        if self.logging_name == "" {
+            return;
+        }
         let mut file = File::options()
             .append(true)
             .open(self.logging_name.clone())
