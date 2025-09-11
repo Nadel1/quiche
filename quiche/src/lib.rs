@@ -2233,8 +2233,7 @@ impl<F: BufFactory> Connection<F> {
                 .append(true)
                 .open(config.logging_name.clone())
                 .unwrap();
-            let save_string =
-                "TIMESTAMP,SENT/RECEIVED,PACKET_NUM,PACKET_SIZE,CWND\n";
+            let save_string = "TIMESTAMP,SENT/RECEIVED,PACKET_NUM,PACKET_SIZE,CWND,BYTES_IN_FLIGHT,RTT\n";
             let _ = file.write_all(save_string.as_bytes());
         }
         if let Some(odcid) = odcid {
@@ -2317,6 +2316,7 @@ impl<F: BufFactory> Connection<F> {
 
     pub fn write_to_log(
         &self, pkt_num: u64, pkt_size: usize, cwnd: usize, sent: bool,
+        bytes_in_flight: u64, measured_rtt: u64,
     ) {
         use std::io::Write;
         if self.logging_name == "" {
@@ -2328,7 +2328,6 @@ impl<F: BufFactory> Connection<F> {
             .unwrap();
         let timestamp = SystemTime::now().duration_since(UNIX_EPOCH);
         let mut save_string = timestamp.unwrap().as_secs().to_string().to_owned();
-        // TODO: add source and destination ip as command line params
         save_string.push_str(",");
         if sent {
             save_string.push_str("SENT,");
@@ -2340,6 +2339,10 @@ impl<F: BufFactory> Connection<F> {
         save_string.push_str(&pkt_size.to_string());
         save_string.push_str(",");
         save_string.push_str(&cwnd.to_string());
+        save_string.push_str(",");
+        save_string.push_str(&bytes_in_flight.to_string());
+        save_string.push_str(",");
+        save_string.push_str(&measured_rtt.to_string());
         save_string.push_str("\n");
         let _ = file.write_all(save_string.as_bytes());
     }
@@ -3742,8 +3745,10 @@ impl<F: BufFactory> Connection<F> {
         let path = self.paths.get_mut(recv_pid)?;
         // It's fine to set the skip counter based on a non-active path's values.
         let cwnd = path.recovery.cwnd();
+        let rtt = path.recovery.rtt().as_secs();
+        let bytes_in_flight = path.recovery.bytes_in_flight();
 
-        self.write_to_log(pn, read, cwnd, false);
+        self.write_to_log(pn, read, cwnd, false, bytes_in_flight as u64, rtt);
 
         Ok(read)
     }
@@ -5265,7 +5270,10 @@ impl<F: BufFactory> Connection<F> {
         }
         let cwnd = active_path.recovery.cwnd();
 
-        self.write_to_log(pn, packet_size, cwnd, true);
+        let rtt = active_path.recovery.rtt().as_secs();
+        let bytes_in_flight = active_path.recovery.bytes_in_flight();
+
+        self.write_to_log(pn, packet_size, cwnd, true, bytes_in_flight as u64, rtt);
 
         Ok((pkt_type, written))
     }
