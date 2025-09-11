@@ -232,7 +232,7 @@ pub trait RecoveryOps {
     #[cfg(test)]
     fn sent_packets_len(&self, epoch: packet::Epoch) -> usize;
 
-    #[cfg(test)]
+
     fn bytes_in_flight(&self) -> usize;
 
     fn bytes_in_flight_duration(&self) -> Duration;

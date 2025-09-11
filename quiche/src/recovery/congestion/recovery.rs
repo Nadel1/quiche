@@ -1,5 +1,5 @@
 // Copyright (C) 2018-2019, Cloudflare, Inc.
-// All rights reserved.
+// All rights reserv
 //
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
@@ -1014,7 +1014,6 @@ impl RecoveryOps for LegacyRecovery {
         self.epochs[epoch].in_flight_count
     }
 
-    #[cfg(test)]
     fn bytes_in_flight(&self) -> usize {
         self.bytes_in_flight.get()
     }
