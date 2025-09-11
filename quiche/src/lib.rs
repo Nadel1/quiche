@@ -5273,7 +5273,14 @@ impl<F: BufFactory> Connection<F> {
         let rtt = active_path.recovery.rtt().as_secs();
         let bytes_in_flight = active_path.recovery.bytes_in_flight();
 
-        self.write_to_log(pn, packet_size, cwnd, true, bytes_in_flight as u64, rtt);
+        self.write_to_log(
+            pn,
+            packet_size,
+            cwnd,
+            true,
+            bytes_in_flight as u64,
+            rtt,
+        );
 
         Ok((pkt_type, written))
     }
