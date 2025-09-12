@@ -6621,6 +6621,7 @@ impl<F: BufFactory> Connection<F> {
 
         let handshake_status = self.handshake_status();
 
+        let mut cwnd_vec = Vec::new();
         for (_, p) in self.paths.iter_mut() {
             if let Some(timer) = p.recovery.loss_detection_timer() {
                 if timer <= now {
@@ -6635,7 +6636,7 @@ impl<F: BufFactory> Connection<F> {
                         self.is_server,
                         &self.trace_id,
                     );
-
+                    cwnd_vec.push(p.recovery.cwnd());
                     self.lost_count += lost_packets;
                     self.lost_bytes += lost_bytes as u64;
 
@@ -6645,7 +6646,9 @@ impl<F: BufFactory> Connection<F> {
                 }
             }
         }
-
+        for cwnd in cwnd_vec {
+            self.write_to_log(0, 0, cwnd, false, 0, 0);
+        }
         // Notify timeout events to the application.
         self.paths.notify_failed_validations();
 
