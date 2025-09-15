@@ -279,7 +279,11 @@ impl State {
 fn bbr_enter_recovery(r: &mut Congestion, in_flight: usize, now: Instant) {
     r.bbr_state.prior_cwnd = per_ack::bbr_save_cwnd(r);
 
-    r.congestion_window = in_flight.max(r.max_datagram_size);
+    if !r.resume.enabled() {
+        r.congestion_window = in_flight.max(r.max_datagram_size);
+    } else {
+        r.congestion_window = r.resume.get_pipesize() / 2;
+    }
     r.congestion_recovery_start_time = Some(now);
 
     r.bbr_state.packet_conservation = true;
@@ -348,9 +352,7 @@ fn congestion_event(
     if r.bbr_state.carefully_resuming {
         println!("---------congestion event in mod.rs detected, switching to drain state!!!------------");
         r.bbr_state.state = BBRStateMachine::Drain;
-        r.resume.change_state(own_resume::CrState::SafeRetreat(
-            largest_lost_pkt.pkt_num,
-        ));
+        r.congestion_window = r.resume.congestion_event(largest_lost_pkt.pkt_num);
     }
     // Upon entering Fast Recovery.
     if !r.in_congestion_recovery(largest_lost_pkt.time_sent) {

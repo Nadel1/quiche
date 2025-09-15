@@ -202,7 +202,7 @@ fn on_packet_acked(
 
         return;
     }
-    //no more data to send 
+    //no more data to send
     if r.app_limited {
         return;
     }
@@ -364,7 +364,11 @@ fn congestion_event(
         let ssthresh =
             cmp::max(ssthresh, r.max_datagram_size * MINIMUM_WINDOW_PACKETS);
         r.ssthresh.update(ssthresh, r.hystart.in_css());
-        r.congestion_window = ssthresh;
+        if !r.resume.enabled() {
+            r.congestion_window = ssthresh;
+        } else {
+            r.congestion_window = r.resume.get_pipesize() / 2;
+        }
 
         r.cubic_state.k = if r.cubic_state.w_max < r.congestion_window as f64 {
             0.0

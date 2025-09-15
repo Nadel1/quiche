@@ -108,8 +108,6 @@ fn bbr_update_round(r: &mut Congestion, packet: &Acked) {
         bbr.round_start = true;
         if r.resume.enabled() {
             println!("--------resume is enabled, set up new cwnd-----------");
-            // start unvalidated state at the start of a new round
-            //r.resume.change_state(CrState::Unvalidated(packet.pkt_num));
             //set carefully resuming to true
             bbr.carefully_resuming = true;
             //set pacing rate
@@ -118,7 +116,7 @@ fn bbr_update_round(r: &mut Congestion, packet: &Acked) {
             //let new_cwnd = cmp::max(
             //    bbr.full_bw,
             //    bbr.probing_rate
-            //        * bbr.rtprop.as_secs() 
+            //        * bbr.rtprop.as_secs()
             //        * bbr.cwnd_gain as u64,
             //);
             //bbr.target_cwnd = new_cwnd as usize;
@@ -288,9 +286,9 @@ fn bbr_enter_drain(r: &mut Congestion) {
 
     bbr.state = BBRStateMachine::Drain;
 
-    //entered drain phase while carefully_resuming set to true
     if bbr.carefully_resuming {
         r.resume.change_state(CrState::SafeRetreat(0));
+        r.congestion_window = r.resume.get_pipesize() / 2;
     }
 
     // pace slowly

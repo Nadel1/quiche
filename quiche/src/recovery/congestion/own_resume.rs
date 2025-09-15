@@ -154,6 +154,10 @@ impl OwnResume {
     pub fn change_state(&mut self, state: CrState) {
         self.cr_state = state;
     }
+
+    pub fn get_pipesize(&self) -> usize {
+        self.pipesize
+    }
     pub fn get_jump_cwnd(&self) -> usize {
         self.jump_cwnd
     }
@@ -177,9 +181,7 @@ impl OwnResume {
                 if packet.pkt_num >= first_packet {
                     if flightsize <= self.pipesize {
                         trace!("{} careful resume complete", self.trace_id);
-                        self.change_state(
-                            CrState::Normal
-                        );
+                        self.change_state(CrState::Normal);
                         (Some(self.pipesize), None)
                     } else {
                         trace!(
@@ -187,9 +189,7 @@ impl OwnResume {
                             self.trace_id
                         );
                         // Store the last packet number that was sent in the Unvalidated Phase
-                        self.change_state(
-                            CrState::Validating(largest_pkt_sent)
-                        );
+                        self.change_state(CrState::Validating(largest_pkt_sent));
                         (Some(flightsize), None)
                     }
                 } else {

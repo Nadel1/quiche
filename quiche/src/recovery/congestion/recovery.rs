@@ -545,6 +545,7 @@ impl LegacyRecovery {
                         self.congestion.initial_congestion_window_packets,
                     );
                 }
+                
             }
         };
 
