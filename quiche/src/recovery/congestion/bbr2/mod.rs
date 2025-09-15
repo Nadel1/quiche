@@ -538,7 +538,7 @@ impl State {
             carefully_resuming: false,
 
             careful_resume_rounds: 0,
-            
+
             probing_rate: 0,
         }
     }
@@ -548,8 +548,13 @@ impl State {
 fn bbr2_enter_recovery(r: &mut Congestion, in_flight: usize, now: Instant) {
     r.bbr2_state.prior_cwnd = per_ack::bbr2_save_cwnd(r);
 
-    r.congestion_window =
-        in_flight + r.bbr2_state.newly_acked_bytes.max(r.max_datagram_size);
+    if !r.resume.enabled() {
+        r.congestion_window =
+            in_flight + r.bbr2_state.newly_acked_bytes.max(r.max_datagram_size);
+    } else {
+        r.congestion_window = r.resume.get_pipesize() / 2;
+    }
+
     r.congestion_recovery_start_time = Some(now);
 
     r.bbr2_state.packet_conservation = true;
@@ -617,6 +622,12 @@ fn congestion_event(
     r: &mut Congestion, bytes_in_flight: usize, lost_bytes: usize,
     largest_lost_pkt: &Sent, now: Instant,
 ) {
+    r.bbr2_state.newly_lost_bytes = lost_bytes;
+    if r.bbr2_state.carefully_resuming {
+        println!("---------congestion event in mod.rs detected, switching to drain state!!!------------");
+        r.bbr2_state.state = BBR2StateMachine::Drain;
+        r.congestion_window = r.resume.congestion_event(largest_lost_pkt.pkt_num);
+    }
     r.bbr2_state.newly_lost_bytes = lost_bytes;
 
     per_loss::bbr2_update_on_loss(r, largest_lost_pkt, lost_bytes, now);

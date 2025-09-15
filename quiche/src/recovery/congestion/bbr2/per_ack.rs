@@ -139,10 +139,10 @@ fn bbr2_enter_drain(r: &mut Congestion) {
     bbr.state = BBR2StateMachine::Drain;
 
     //entered drain phase while carefully_resuming set to true
-    //if bbr.carefully_resuming {
-    //    r.resume.change_state(CrState::SafeRetreat(0));
-    //}
-
+    if bbr.carefully_resuming {
+        r.resume.change_state(CrState::SafeRetreat(0));
+        r.congestion_window=r.resume.get_pipesize()/2;
+    }
     // pace slowly
     bbr.pacing_gain = PACING_GAIN / STARTUP_CWND_GAIN;
 
@@ -571,15 +571,14 @@ fn bbr2_update_round(r: &mut Congestion, packet: &Acked) {
         }
         if r.resume.enabled() {
             println!("--------resume is enabled, set up new cwnd-----------");
-            // start unvalidated state at the start of a new round
-            //r.resume.change_state(CrState::Unvalidated(packet.pkt_num));
             //set carefully resuming to true
             r.bbr2_state.carefully_resuming = true;
             //set pacing rate
-            let nominal_pacing_rate=r.bbr2_state.bw * r.bbr2_state.pacing_gain as u64;
-      
+            let nominal_pacing_rate =
+                r.bbr2_state.bw * r.bbr2_state.pacing_gain as u64;
+
             r.bbr2_state.pacing_rate =
-                cmp::max(nominal_pacing_rate,  r.bbr2_state.probing_rate);
+                cmp::max(nominal_pacing_rate, r.bbr2_state.probing_rate);
             //let new_cwnd = cmp::max(
             //    r.bbr2_state.bw,
             //    r.bbr2_state.probe_rtt_min_delay.as_secs()
