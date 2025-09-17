@@ -64,7 +64,7 @@ async fn main() -> tokio_quiche::QuicResult<()> {
 
     println!("Path is: {:?}", file);
 
-    let mut quic_connection =
+    let mut quic_connection: tokio_quiche::QuicConnection =
         tokio_quiche::quic::connect_with_config(socket, None, &params, h3_driver)
             .await?;
 
@@ -98,10 +98,10 @@ async fn main() -> tokio_quiche::QuicResult<()> {
                                     "fin" => fin,
                                     "len" => pooled.len()
                                 );
-                                //println!(
-                                //    "{}",
-                                //    std::str::from_utf8(&pooled).unwrap()
-                                //);
+                                println!(
+                                    "{}",
+                                    std::str::from_utf8(&pooled).unwrap()
+                                );
                                 if fin {
                                     println!("received full body, exiting");
                                     break 'body;
@@ -133,6 +133,7 @@ async fn main() -> tokio_quiche::QuicResult<()> {
                 ),
             }
         }
+
     }
     quic_connection.shutdown_connection().await?;
     let send_application_close = true;
