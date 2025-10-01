@@ -148,13 +148,12 @@ fn make_quiche_config(
             .map_err(|_| "QuicSettings::max_idle_timeout exceeds u64")?;
         config.set_max_idle_timeout(ms);
     }
-
     config.enable_dgram(
         quic_settings.enable_dgram,
         quic_settings.dgram_recv_max_queue_len,
         quic_settings.dgram_send_max_queue_len,
     );
-
+    config.verify_peer(false);
     config.set_max_recv_udp_payload_size(quic_settings.max_recv_udp_payload_size);
     config.set_max_send_udp_payload_size(quic_settings.max_send_udp_payload_size);
     config.set_initial_max_data(quic_settings.initial_max_data);
