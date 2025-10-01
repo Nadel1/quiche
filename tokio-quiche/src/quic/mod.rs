@@ -87,6 +87,7 @@ use datagram_socket::DatagramSocketRecv;
 use datagram_socket::DatagramSocketSend;
 use foundations::telemetry::log;
 
+
 use crate::http3::settings::Http3Settings;
 use crate::metrics::DefaultMetrics;
 use crate::metrics::Metrics;
@@ -202,7 +203,8 @@ where
     let mut client_config = Config::new(params, socket.capabilities)?;
     println!("-----in connect-with-config, client_config logging file is: {:?}",client_config.logging_name);
     let scid = SimpleConnectionIdGenerator.new_connection_id(0);
-
+    println!("setting to false!");
+    client_config.quiche_config.verify_peer(false);
     #[cfg(feature = "zero-copy")]
     let mut quiche_conn = quiche::connect_with_buffer_factory(
         host,
