@@ -323,7 +323,7 @@ use crate::BufSplit;
 ///
 /// [`Config::set_application_protos()`]:
 /// ../struct.Config.html#method.set_application_protos
-pub const APPLICATION_PROTOCOL: &[&[u8]] = &[b"h3"];
+pub const APPLICATION_PROTOCOL: &[&[u8]] = &[b"hq-29"];//&[b"h3"];
 
 // The offset used when converting HTTP/3 urgency to quiche urgency.
 const PRIORITY_URGENCY_OFFSET: u8 = 124;
