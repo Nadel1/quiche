@@ -644,7 +644,7 @@ impl RecoveryOps for LegacyRecovery {
                 .max()
                 .unwrap_or_default();
             // Increase the congestion window by a jump determined by careful resume
-            self.congestion.congestion_window +=
+            self.congestion.congestion_window =
                 self.congestion.resume.send_packet(
                     Some(self.rtt_stats.smoothed_rtt),
                     self.congestion.congestion_window,

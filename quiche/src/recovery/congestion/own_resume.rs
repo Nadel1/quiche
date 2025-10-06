@@ -234,10 +234,10 @@ impl OwnResume {
         // Do nothing when data limited to avoid having insufficient data
         // to be able to validate transmission at a higher rate
         if app_limited {
-            return 0; //self.saved_cwnd;
+            return cwnd; //self.saved_cwnd;
         }
         if !iw_acked {
-            return 0; //self.saved_cwnd;
+            return cwnd; //self.saved_cwnd;
         }
         match self.cr_state {
             CrState::Reconnaissance => {
