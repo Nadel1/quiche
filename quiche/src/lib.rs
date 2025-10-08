@@ -2220,7 +2220,7 @@ impl<F: BufFactory> Connection<F> {
                 .append(true)
                 .open(config.logging_name.clone())
                 .unwrap();
-            let save_string = "TIMESTAMP,SENT/RECEIVED,PACKET_NUM,PACKET_SIZE,CWND,BYTES_IN_FLIGHT,RTT\n";
+            let save_string = "TIMESTAMP,SENT/RECEIVED,PACKET_NUM,PACKET_SIZE,CWND,BYTES_IN_FLIGHT,RTT,PTO\n";
             let _ = file.write_all(save_string.as_bytes());
         }
         if let Some(odcid) = odcid {
@@ -2301,10 +2301,7 @@ impl<F: BufFactory> Connection<F> {
         self.set_qlog_with_level(writer, title, description, QlogLevel::Base)
     }
 
-    pub fn write_to_log(
-        &self, pkt_num: u64, pkt_size: usize, cwnd: usize, sent: bool,
-        bytes_in_flight: u64, measured_rtt: u64,
-    ) {
+    pub fn write_to_log(&self, sent: bool, logging_values: Vec<u64>) {
         use std::io::Write;
         if self.logging_name == "" {
             return;
@@ -2317,19 +2314,15 @@ impl<F: BufFactory> Connection<F> {
         let mut save_string = timestamp.unwrap().as_secs().to_string().to_owned();
         save_string.push_str(",");
         if sent {
-            save_string.push_str("SENT,");
+            save_string.push_str("SENT");
         } else {
-            save_string.push_str("RECEIVED,");
+            save_string.push_str("RECEIVED");
         }
-        save_string.push_str(&pkt_num.to_string());
-        save_string.push_str(",");
-        save_string.push_str(&pkt_size.to_string());
-        save_string.push_str(",");
-        save_string.push_str(&cwnd.to_string());
-        save_string.push_str(",");
-        save_string.push_str(&bytes_in_flight.to_string());
-        save_string.push_str(",");
-        save_string.push_str(&measured_rtt.to_string());
+        let vec_iter = logging_values.iter();
+        for val in vec_iter {
+            save_string.push_str(",");
+            save_string.push_str(&val.to_string());
+        }
         save_string.push_str("\n");
         let _ = file.write_all(save_string.as_bytes());
     }
@@ -3712,8 +3705,9 @@ impl<F: BufFactory> Connection<F> {
         let cwnd = path.recovery.cwnd();
         let rtt = path.recovery.rtt().as_secs();
         let bytes_in_flight = path.recovery.bytes_in_flight();
-
-        self.write_to_log(pn, read, cwnd, false, bytes_in_flight as u64, rtt);
+        let logging_values =
+            vec![pn, read as u64, cwnd as u64, bytes_in_flight as u64, rtt,path.recovery.pto().as_secs()];
+        self.write_to_log(false, logging_values);
 
         Ok(read)
     }
@@ -4693,7 +4687,7 @@ impl<F: BufFactory> Connection<F> {
                         };
 
                         if push_frame_to_pkt!(b, frames, frame, left) {
-                            let pto = path.recovery.pto();
+                            let pto: Duration = path.recovery.pto();
                             self.draining_timer = Some(now + (pto * 3));
 
                             ack_eliciting = true;
@@ -5234,14 +5228,15 @@ impl<F: BufFactory> Connection<F> {
         let rtt = active_path.recovery.rtt().as_secs();
         let bytes_in_flight = active_path.recovery.bytes_in_flight();
 
-        self.write_to_log(
+        let logging_values = vec![
             pn,
-            packet_size,
-            cwnd,
-            true,
+            packet_size as u64,
+            cwnd as u64,
             bytes_in_flight as u64,
             rtt,
-        );
+            active_path.recovery.pto().as_secs()
+        ];
+        self.write_to_log(true, logging_values);
 
         Ok((pkt_type, written))
     }
@@ -6607,10 +6602,10 @@ impl<F: BufFactory> Connection<F> {
                 }
             }
         }
-        for cwnd in cwnd_vec {
-            self.write_to_log(0, 0, cwnd, false, 0, 0);
-        }
-        // Notify timeout events to the application.
+        //for cwnd in cwnd_vec {
+        //    self.write_to_log(0, 0, cwnd, false, 0, 0);
+        //}
+        //// Notify timeout events to the application.
         self.paths.notify_failed_validations();
 
         // If the active path failed, try to find a new candidate.

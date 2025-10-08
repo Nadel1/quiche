@@ -229,7 +229,6 @@ fn bbr_set_cwnd(r: &mut Congestion, bytes_in_flight: usize) {
                 < r.max_datagram_size * r.initial_congestion_window_packets
         {
             if r.resume.enabled() {
-                println!("------------Careful resume is enabled!!!------------");
                 let cr_state = r.resume.get_state();
                 match cr_state {
                     CrState::Unvalidated(_) => {},
@@ -239,9 +238,7 @@ fn bbr_set_cwnd(r: &mut Congestion, bytes_in_flight: usize) {
                     },
                 }
             } else {
-                println!(
-                    "------------Careful resume is not enabled!!!------------"
-                );
+
                 r.congestion_window += acked_bytes;
             }
         }
