@@ -1086,6 +1086,14 @@ impl RecoveryOps for GRecovery {
             .min(64 * 1024)
             .max(floor as u64) as usize
     }
+    
+    fn actual_pto(&self) -> Duration {
+        todo!()
+    }
+
+    fn return_pto_count(&self) -> u64 {
+        todo!()
+    }
 }
 
 impl std::fmt::Debug for GRecovery {

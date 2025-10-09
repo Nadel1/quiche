@@ -207,6 +207,9 @@ pub trait RecoveryOps {
 
     fn pto(&self) -> Duration;
 
+    fn actual_pto(&self) -> Duration;
+
+    fn return_pto_count(&self) -> u64;
     /// The most recent data delivery rate estimate.
     fn delivery_rate(&self) -> Bandwidth;
 
@@ -231,7 +234,6 @@ pub trait RecoveryOps {
 
     #[cfg(test)]
     fn sent_packets_len(&self, epoch: packet::Epoch) -> usize;
-
 
     fn bytes_in_flight(&self) -> usize;
 
@@ -2004,11 +2006,14 @@ mod tests {
         assert_eq!(r.in_flight_count(packet::Epoch::Application), 0);
         assert_eq!(r.bytes_in_flight(), 0);
         assert_eq!(r.bytes_in_flight_duration(), Duration::from_micros(11250));
-        assert_eq!(r.cwnd(), match cc_algorithm_name {
-            "bbr" => 14000,
-            "bbr2" => 14000,
-            _ => 12000,
-        });
+        assert_eq!(
+            r.cwnd(),
+            match cc_algorithm_name {
+                "bbr" => 14000,
+                "bbr2" => 14000,
+                _ => 12000,
+            }
+        );
 
         assert_eq!(r.lost_count(), 0);
 

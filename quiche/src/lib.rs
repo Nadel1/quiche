@@ -2301,7 +2301,7 @@ impl<F: BufFactory> Connection<F> {
         self.set_qlog_with_level(writer, title, description, QlogLevel::Base)
     }
 
-    pub fn write_to_log(&self, sent: bool, logging_values: Vec<u64>) {
+    pub fn write_to_log(&self, sent: bool, logging_values: Vec<u128>) {
         use std::io::Write;
         if self.logging_name == "" {
             return;
@@ -2779,7 +2779,9 @@ impl<F: BufFactory> Connection<F> {
     /// ```
     pub fn recv(&mut self, buf: &mut [u8], info: RecvInfo) -> Result<usize> {
         let len = buf.len();
-
+        println!();
+        println!("New recv()");
+        println!("Len is {:?} (if 0 then we are stuck)",len);
         if len == 0 {
             return Err(Error::BufferTooShort);
         }
@@ -2920,6 +2922,7 @@ impl<F: BufFactory> Connection<F> {
     fn recv_single(
         &mut self, buf: &mut [u8], info: &RecvInfo, recv_pid: Option<usize>,
     ) -> Result<usize> {
+        println!("in recv_single with buf len: {:?}",buf.len());
         let now = Instant::now();
 
         if buf.is_empty() {
@@ -2950,6 +2953,7 @@ impl<F: BufFactory> Connection<F> {
                 )
             })?;
 
+        println!("Header type: {:?}",hdr.ty);
         if hdr.ty == Type::VersionNegotiation {
             // Version negotiation packets can only be sent by the server.
             if self.is_server {
@@ -3097,12 +3101,13 @@ impl<F: BufFactory> Connection<F> {
 
             return Err(Error::Done);
         }
-
+        println!("passed in recv_single header checks");
         if self.is_server && !self.did_version_negotiation {
+            println!("Server side!");
             if !version_is_supported(hdr.version) {
                 return Err(Error::UnknownVersion);
             }
-
+            println!("passed version check");
             self.version = hdr.version;
             self.did_version_negotiation = true;
 
@@ -3135,6 +3140,8 @@ impl<F: BufFactory> Connection<F> {
             })? as usize
         };
 
+        println!("payload len: {:?} and cap: {:?}",payload_len,b.cap());
+
         // Make sure the buffer is same or larger than an explicit
         // payload length.
         if payload_len > b.cap() {
@@ -3145,7 +3152,7 @@ impl<F: BufFactory> Connection<F> {
                 &self.trace_id,
             ));
         }
-
+        println!("derivin secrets on server");
         // Derive initial secrets on the server.
         if !self.derived_initial_secrets {
             let (aead_open, aead_seal) = crypto::derive_initial_key_material(
@@ -3159,6 +3166,7 @@ impl<F: BufFactory> Connection<F> {
             self.crypto_ctx[packet::Epoch::Initial].crypto_seal = Some(aead_seal);
 
             self.derived_initial_secrets = true;
+            println!("---derivided initial secrets!---");
         }
 
         // Select packet number space epoch based on the received packet's type.
@@ -3167,17 +3175,20 @@ impl<F: BufFactory> Connection<F> {
         // Select AEAD context used to open incoming packet.
         let aead = if hdr.ty == Type::ZeroRTT {
             // Only use 0-RTT key if incoming packet is 0-RTT.
+            println!("selecting aead cypto context from epoch: {:?}, using 0rtt key",epoch);
             self.crypto_ctx[epoch].crypto_0rtt_open.as_ref()
         } else {
             // Otherwise use the packet number space's main key.
+            println!("selecting aead cypto context from epoch: {:?}, using packet number spaces main key",epoch);
             self.crypto_ctx[epoch].crypto_open.as_ref()
         };
-
+        println!("packet will be discarded if no usable key available");
         // Finally, discard packet if no usable key is available.
         let mut aead = match aead {
             Some(v) => v,
 
             None => {
+                println!("Something went wrong with aead");
                 if hdr.ty == Type::ZeroRTT
                     && self.undecryptable_pkts.len() < MAX_UNDECRYPTABLE_PACKETS
                     && !self.is_established()
@@ -3189,7 +3200,7 @@ impl<F: BufFactory> Connection<F> {
                     // of undecryptable packets as well.
                     let pkt_len = b.off() + payload_len;
                     let pkt = (b.buf()[..pkt_len]).to_vec();
-
+                    println!("push back undecryptable packets! with len: {pkt_len}");
                     self.undecryptable_pkts.push_back((pkt, *info));
                     return Ok(pkt_len);
                 }
@@ -3200,7 +3211,7 @@ impl<F: BufFactory> Connection<F> {
                     self.is_server,
                     &self.trace_id,
                 );
-
+                println!("error is: {:?}",e);
                 return Err(e);
             },
         };
@@ -3246,9 +3257,10 @@ impl<F: BufFactory> Connection<F> {
                     (pn < key_update.pn_on_update).then_some(key_update)
                 })
             {
+                println!("packet arrived before key update");
                 aead = &key_update.crypto_open;
             } else {
-                trace!("{} peer-initiated key update", self.trace_id);
+                println!("{} peer-initiated key update", self.trace_id);
 
                 aead_next = Some((
                     self.crypto_ctx[epoch]
@@ -3268,7 +3280,9 @@ impl<F: BufFactory> Connection<F> {
                 aead = &aead_next.as_ref().unwrap().0;
             }
         }
-
+        println!("packetnum: {pn}, packet number length: {pn_len}");
+        println!("decrypt payload");
+        //SOMETHING GOES WRONG AFTER THIS PRINT!!!
         let mut payload = packet::decrypt_pkt(
             &mut b,
             pn,
@@ -3279,16 +3293,20 @@ impl<F: BufFactory> Connection<F> {
         .map_err(|e| {
             drop_pkt_on_err(e, self.recv_count, self.is_server, &self.trace_id)
         })?;
+        println!("passed decrypt");
 
         if self.pkt_num_spaces[epoch].recv_pkt_num.contains(pn) {
             trace!("{} ignored duplicate packet {}", self.trace_id, pn);
+            println!("duplicate packet error");
             return Err(Error::Done);
         }
 
         // Packets with no frames are invalid.
         if payload.cap() == 0 {
+            println!("invalid packet error");
             return Err(Error::InvalidPacket);
         }
+        println!("passed checks");
 
         // Now that we decrypted the packet, let's see if we can map it to an
         // existing path.
@@ -3299,20 +3317,22 @@ impl<F: BufFactory> Connection<F> {
             // During handshake, we are on the initial path.
             self.paths.get_active_path_id()?
         };
-
+        println!("start aead check");
         // The key update is verified once a packet is successfully decrypted
         // using the new keys.
         if let Some((open_next, seal_next)) = aead_next {
+            println!("key update has happened");
             if !self.crypto_ctx[epoch]
                 .key_update
                 .as_ref()
                 .is_none_or(|prev| prev.update_acked)
             {
                 // Peer has updated keys twice without awaiting confirmation.
+                println!("error: KeyUpdate");
                 return Err(Error::KeyUpdate);
             }
-
-            trace!("{} key update verified", self.trace_id);
+            
+            println!("{} key update verified", self.trace_id);
 
             let _ = self.crypto_ctx[epoch].crypto_seal.replace(seal_next);
 
@@ -3402,8 +3422,12 @@ impl<F: BufFactory> Connection<F> {
         // whether this is a non-probing packet.
         let mut probing = true;
 
+        let initial_payload_capacity=payload.cap();
+        println!("Processing packet with capactiy : {:?}",initial_payload_capacity);
+
         // Process packet payload.
         while payload.cap() > 0 {
+            println!("In processing payload while loop");
             let frame = frame::Frame::from_bytes(&mut payload, hdr.ty)?;
 
             qlog_with_type!(QLOG_PACKET_RX, self.qlog, _q, {
@@ -3703,10 +3727,19 @@ impl<F: BufFactory> Connection<F> {
         let path = self.paths.get_mut(recv_pid)?;
         // It's fine to set the skip counter based on a non-active path's values.
         let cwnd = path.recovery.cwnd();
-        let rtt = path.recovery.rtt().as_secs();
+        let rtt = path.recovery.rtt().as_micros();
         let bytes_in_flight = path.recovery.bytes_in_flight();
-        let logging_values =
-            vec![pn, read as u64, cwnd as u64, bytes_in_flight as u64, rtt,path.recovery.pto().as_secs()];
+        let logging_values = vec![
+            pn as u128,
+            read as u128,
+            cwnd as u128,
+            bytes_in_flight as u128,
+            rtt as u128,
+            path.recovery.actual_pto().as_micros(),
+            path.recovery.rttvar().as_micros(),
+            path.recovery.return_pto_count() as u128,
+            initial_payload_capacity as u128
+        ];
         self.write_to_log(false, logging_values);
 
         Ok(read)
@@ -4446,6 +4479,7 @@ impl<F: BufFactory> Connection<F> {
             }
 
             if let Some(key_update) = crypto_ctx.key_update.as_mut() {
+                println!("send key_update");
                 key_update.update_acked = true;
             }
         }
@@ -5225,16 +5259,18 @@ impl<F: BufFactory> Connection<F> {
         }
         let cwnd = active_path.recovery.cwnd();
 
-        let rtt = active_path.recovery.rtt().as_secs();
+        let rtt = active_path.recovery.rtt().as_micros();
         let bytes_in_flight = active_path.recovery.bytes_in_flight();
 
         let logging_values = vec![
-            pn,
-            packet_size as u64,
-            cwnd as u64,
-            bytes_in_flight as u64,
-            rtt,
-            active_path.recovery.pto().as_secs()
+            pn as u128,
+            packet_size as u128,
+            cwnd as u128,
+            bytes_in_flight as u128,
+            rtt as u128,
+            active_path.recovery.actual_pto().as_micros(),
+            active_path.recovery.rttvar().as_micros(),
+            active_path.recovery.return_pto_count() as u128
         ];
         self.write_to_log(true, logging_values);
 
@@ -6508,7 +6544,7 @@ impl<F: BufFactory> Connection<F> {
                 .key_update
                 .as_ref()
                 .map(|key_update| key_update.timer);
-
+            println!("key update timer {:?}",key_update_timer);
             let timers = [self.idle_timer, path_timer, key_update_timer];
 
             timers.iter().filter_map(|&x| x).min()
@@ -6569,6 +6605,7 @@ impl<F: BufFactory> Connection<F> {
         {
             if timer <= now {
                 // Discard previous key once key update timer expired.
+                println!("Discarded previous key, update key timer expired!!! {:?}",timer);
                 let _ = self.crypto_ctx[packet::Epoch::Application]
                     .key_update
                     .take();
@@ -7715,6 +7752,7 @@ impl<F: BufFactory> Connection<F> {
         &mut self, frame: frame::Frame, hdr: &Header, recv_path_id: usize,
         epoch: packet::Epoch, now: Instant,
     ) -> Result<()> {
+        println!("In process frame! with frame {:?}",frame);
         trace!("{} rx frm {:?}", self.trace_id, frame);
         match frame {
             frame::Frame::Padding { .. } => (),
@@ -7744,8 +7782,9 @@ impl<F: BufFactory> Connection<F> {
                 let largest_acked = ranges.last().expect(
                     "ACK frames should always have at least one ack range",
                 );
-
+                println!("Before for loop for ack_received");
                 for (_, p) in self.paths.iter_mut() {
+                    
                     if self.pkt_num_spaces[epoch]
                         .largest_tx_pkt_num
                         .is_some_and(|largest_sent| largest_sent < largest_acked)
@@ -7754,13 +7793,15 @@ impl<F: BufFactory> Connection<F> {
                         // An endpoint SHOULD treat receipt of an acknowledgment
                         // for a packet it did not send as
                         // a connection error of type PROTOCOL_VIOLATION
+                        println!("Invalid range");
                         return Err(Error::InvalidAckRange);
                     }
 
                     if is_app_limited {
+                        println!("app_limited");
                         p.recovery.delivery_rate_update_app_limited(true);
                     }
-
+                    println!("Calling on ack received in process frame");
                     let OnAckReceivedOutcome {
                         lost_packets,
                         lost_bytes,
@@ -8733,7 +8774,7 @@ fn drop_pkt_on_err(
         return e;
     }
 
-    trace!("{trace_id} dropped invalid packet");
+    println!("{trace_id} dropped invalid packet");
 
     // Ignore other invalid packets that haven't been authenticated to prevent
     // man-in-the-middle and man-on-the-side attacks.

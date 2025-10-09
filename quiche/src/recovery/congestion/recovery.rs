@@ -346,6 +346,8 @@ pub struct LegacyRecovery {
 
     bytes_lost: u64,
 
+    pto_duration: Duration,
+
     pub max_datagram_size: usize,
 
     #[cfg(feature = "qlog")]
@@ -403,6 +405,8 @@ impl LegacyRecovery {
             congestion: Congestion::from_config(recovery_config, trace_id),
 
             newly_acked: Vec::new(),
+
+            pto_duration: Duration::new(0, 0),
         }
     }
 
@@ -428,7 +432,7 @@ impl LegacyRecovery {
     }
 
     fn pto_time_and_space(
-        &self, handshake_status: HandshakeStatus, now: Instant,
+        &mut self, handshake_status: HandshakeStatus, now: Instant,
     ) -> (Option<Instant>, Epoch) {
         let mut duration = self.pto() * 2_u32.pow(self.pto_count);
 
@@ -465,11 +469,12 @@ impl LegacyRecovery {
                     self.rtt(),
                     cmp::max(self.rtt_stats.rttvar * 4, GRANULARITY)
                 );
-                println!("rttvar is {:?}",self.rtt_stats.rttvar);
+                println!("rttvar is {:?}", self.rtt_stats.rttvar);
                 println!("---duration currently is {:?}, pto count is {:?}, max ack delay is {:?}----",duration.as_secs(),self.pto_count,self.rtt_stats.max_ack_delay);
                 duration +=
                     self.rtt_stats.max_ack_delay * 2_u32.pow(self.pto_count);
                 println!("new duration: {:?}", duration);
+                self.pto_duration = duration;
             }
 
             let new_time = epoch
@@ -698,7 +703,7 @@ impl RecoveryOps for LegacyRecovery {
         handshake_status: HandshakeStatus, now: Instant, skip_pn: Option<u64>,
         trace_id: &str,
     ) -> Result<OnAckReceivedOutcome> {
-        println!("Received ACK");
+        println!("Received ACK (on received ack called)");
         let AckedDetectionResult {
             acked_bytes,
             spurious_losses,
@@ -976,6 +981,9 @@ impl RecoveryOps for LegacyRecovery {
         self.rtt() + cmp::max(self.rtt_stats.rttvar * 4, GRANULARITY)
     }
 
+    fn actual_pto(&self) -> Duration {
+        self.pto_duration
+    }
     /// The most recent data delivery rate estimate.
     fn delivery_rate(&self) -> Bandwidth {
         self.congestion.delivery_rate()
@@ -1046,6 +1054,9 @@ impl RecoveryOps for LegacyRecovery {
         self.pto_count
     }
 
+    fn return_pto_count(&self) -> u64 {
+        self.pto_count as u64
+    }
     #[cfg(test)]
     fn pkt_thresh(&self) -> u64 {
         self.pkt_thresh
