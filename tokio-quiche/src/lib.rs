@@ -100,6 +100,7 @@ pub extern crate quiche;
 pub mod buf_factory;
 pub mod http3;
 pub mod metrics;
+pub mod args;
 pub mod quic;
 mod result;
 pub mod settings;
