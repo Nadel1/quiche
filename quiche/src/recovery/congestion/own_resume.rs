@@ -278,7 +278,6 @@ impl OwnResume {
     }
 
     pub fn congestion_event(&mut self, largest_pkt_sent: u64) -> usize {
-        println!("in congestion event!!");
         match self.cr_state {
             CrState::Unvalidated(_) => {
                 println!("{} congestion during unvalidated phase", self.trace_id);

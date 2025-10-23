@@ -200,7 +200,6 @@ impl Open {
     pub fn open_with_u64_counter(
         &self, counter: u64, ad: &[u8], buf: &mut [u8],
     ) -> Result<usize> {
-        println!("in open with u64 counter, counter: {counter}");
         if cfg!(feature = "fuzzing") {
             let tag_len = self.alg.tag_len();
             let out_len = match buf.len().checked_sub(tag_len) {

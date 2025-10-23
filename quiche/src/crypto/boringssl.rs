@@ -83,10 +83,8 @@ impl PacketKey {
     pub fn open_with_u64_counter(
         &self, counter: u64, ad: &[u8], buf: &mut [u8],
     ) -> Result<usize> {
-        println!("in packet: open_with_u64_counter");
         let tag_len = self.alg.tag_len();
 
-        println!("buf_len: {:?} and tag_len: {tag_len}",buf.len());
         let mut out_len = match buf.len().checked_sub(tag_len) {
             Some(n) => n,
             None => return Err(Error::CryptoFail),
@@ -95,7 +93,6 @@ impl PacketKey {
         let max_out_len = out_len;
 
         let nonce = make_nonce(&self.nonce, counter);
-        println!("max_out_len: {max_out_len}, nonce: {:?}",nonce);
         let rc = unsafe {
             EVP_AEAD_CTX_open(
                 &self.ctx,          // ctx
@@ -110,8 +107,9 @@ impl PacketKey {
                 ad.len(),           // ad_len
             )
         };
-        println!("rc: {rc} if not 1 -> cryptofail");
+        
         if rc != 1 {
+            println!("cryptofail");
             return Err(Error::CryptoFail);
         }
 

@@ -660,16 +660,12 @@ pub fn decrypt_pkt<'a>(
     let payload_offset = b.off();
 
     let (header, mut payload) = b.split_at(payload_offset)?;
-    println!("In decrypt packet, payload_len: {payload_len}, pn_len: {pn_len}");
     let payload_len = payload_len
         .checked_sub(pn_len)
         .ok_or(Error::InvalidPacket)?;
-    println!("passed payload len check");
     let mut ciphertext = payload.peek_bytes_mut(payload_len)?;
-    println!("passed peek bytes");
     let payload_len =
         aead.open_with_u64_counter(pn, header.as_ref(), ciphertext.as_mut())?;
-    println!("passed open with u64 counter");
     Ok(b.get_bytes(payload_len)?)
 }
 

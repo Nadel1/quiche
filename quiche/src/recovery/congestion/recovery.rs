@@ -462,19 +462,8 @@ impl LegacyRecovery {
                     return (pto_timeout, pto_space);
                 }
 
-                // Include max_ack_delay and backoff for Application Data.
-                println!();
-                println!(
-                    "---pto: {:?} with rtt {:?} + {:?}---",
-                    self.pto(),
-                    self.rtt(),
-                    cmp::max(self.rtt_stats.rttvar * 4, GRANULARITY)
-                );
-                println!("rttvar is {:?}", self.rtt_stats.rttvar);
-                println!("---duration currently is {:?}, pto count is {:?}, max ack delay is {:?}----",duration.as_secs(),self.pto_count,self.rtt_stats.max_ack_delay);
                 duration +=
                     self.rtt_stats.max_ack_delay * 2_u32.pow(self.pto_count);
-                println!("new duration: {:?}", duration);
                 self.pto_duration = duration;
             }
 
@@ -521,10 +510,6 @@ impl LegacyRecovery {
     ) -> (usize, usize) {
         let loss_delay = cmp::max(self.rtt_stats.latest_rtt, self.rtt())
             .mul_f64(self.time_thresh);
-        println!(
-            "---detected loss in recovery, loss delay is: {:?}---",
-            loss_delay.as_secs()
-        );
         let loss = self.epochs[epoch].detect_lost_packets(
             loss_delay,
             self.pkt_thresh,
@@ -704,7 +689,6 @@ impl RecoveryOps for LegacyRecovery {
         handshake_status: HandshakeStatus, now: Instant, skip_pn: Option<u64>,
         trace_id: &str,
     ) -> Result<OnAckReceivedOutcome> {
-        println!("Received ACK (on received ack called)");
         let AckedDetectionResult {
             acked_bytes,
             spurious_losses,
