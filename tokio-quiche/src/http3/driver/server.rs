@@ -24,7 +24,6 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::ops::Deref;
 use std::sync::Arc;
 
 use tokio::sync::mpsc;
@@ -61,44 +60,15 @@ pub type ServerH3Controller = H3Controller<ServerHooks>;
 /// transfer data.
 pub type ServerEventStream = mpsc::UnboundedReceiver<ServerH3Event>;
 
-#[derive(Clone, Debug)]
-pub struct RawPriorityValue(Vec<u8>);
-
-impl From<Vec<u8>> for RawPriorityValue {
-    fn from(value: Vec<u8>) -> Self {
-        RawPriorityValue(value)
-    }
-}
-
-impl Deref for RawPriorityValue {
-    type Target = [u8];
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
 /// Events produced by [ServerH3Driver].
 #[derive(Debug)]
 pub enum ServerH3Event {
     Core(H3Event),
-
-    Headers {
-        incoming_headers: IncomingH3Headers,
-        /// The latest PRIORITY_UPDATE frame value, if any.
-        priority: Option<RawPriorityValue>,
-    },
 }
 
 impl From<H3Event> for ServerH3Event {
     fn from(ev: H3Event) -> Self {
-        match ev {
-            H3Event::IncomingHeaders(incoming_headers) => Self::Headers {
-                incoming_headers,
-                priority: None,
-            },
-            _ => Self::Core(ev),
-        }
+        Self::Core(ev)
     }
 }
 
@@ -160,12 +130,6 @@ impl ServerHooks {
             stream_ctx.associated_dgram_flow_id = Some(flow_id);
         }
 
-        let latest_priority_update: Option<RawPriorityValue> = driver
-            .conn_mut()?
-            .take_last_priority_update(stream_id)
-            .ok()
-            .map(|v| v.into());
-
         let headers = IncomingH3Headers {
             stream_id,
             headers,
@@ -182,10 +146,7 @@ impl ServerHooks {
 
         driver
             .h3_event_sender
-            .send(ServerH3Event::Headers {
-                incoming_headers: headers,
-                priority: latest_priority_update,
-            })
+            .send(H3Event::IncomingHeaders(headers).into())
             .map_err(|_| H3ConnectionError::ControllerWentAway)?;
         driver.hooks.requests += 1;
 
