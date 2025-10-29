@@ -68,6 +68,7 @@ use crate::recovery::INITIAL_TIME_THRESHOLD;
 use crate::recovery::MAX_OUTSTANDING_NON_ACK_ELICITING;
 use crate::recovery::MAX_PACKET_THRESHOLD;
 use crate::recovery::MAX_PTO_PROBES_COUNT;
+use crate::recovery::PACKET_REORDER_TIME_THRESHOLD;
 
 #[derive(Default)]
 struct RecoveryEpoch {
@@ -346,6 +347,8 @@ pub struct LegacyRecovery {
 
     bytes_lost: u64,
 
+    pto_duration: Duration,
+
     pub max_datagram_size: usize,
 
     #[cfg(feature = "qlog")]
@@ -403,6 +406,8 @@ impl LegacyRecovery {
             congestion: Congestion::from_config(recovery_config, trace_id),
 
             newly_acked: Vec::new(),
+
+            pto_duration: Duration::new(0, 0),
         }
     }
 
@@ -428,7 +433,7 @@ impl LegacyRecovery {
     }
 
     fn pto_time_and_space(
-        &self, handshake_status: HandshakeStatus, now: Instant,
+        &mut self, handshake_status: HandshakeStatus, now: Instant,
     ) -> (Option<Instant>, Epoch) {
         let mut duration = self.pto() * 2_u32.pow(self.pto_count);
 
@@ -457,19 +462,9 @@ impl LegacyRecovery {
                     return (pto_timeout, pto_space);
                 }
 
-                // Include max_ack_delay and backoff for Application Data.
-                println!();
-                println!(
-                    "---pto: {:?} with rtt {:?} + {:?}---",
-                    self.pto(),
-                    self.rtt(),
-                    cmp::max(self.rtt_stats.rttvar * 4, GRANULARITY)
-                );
-                println!("rttvar is {:?}",self.rtt_stats.rttvar);
-                println!("---duration currently is {:?}, pto count is {:?}, max ack delay is {:?}----",duration.as_secs(),self.pto_count,self.rtt_stats.max_ack_delay);
                 duration +=
                     self.rtt_stats.max_ack_delay * 2_u32.pow(self.pto_count);
-                println!("new duration: {:?}", duration);
+                self.pto_duration = duration;
             }
 
             let new_time = epoch
@@ -515,10 +510,6 @@ impl LegacyRecovery {
     ) -> (usize, usize) {
         let loss_delay = cmp::max(self.rtt_stats.latest_rtt, self.rtt())
             .mul_f64(self.time_thresh);
-        println!(
-            "---detected loss in recovery, loss delay is: {:?}---",
-            loss_delay.as_secs()
-        );
         let loss = self.epochs[epoch].detect_lost_packets(
             loss_delay,
             self.pkt_thresh,
@@ -698,7 +689,6 @@ impl RecoveryOps for LegacyRecovery {
         handshake_status: HandshakeStatus, now: Instant, skip_pn: Option<u64>,
         trace_id: &str,
     ) -> Result<OnAckReceivedOutcome> {
-        println!("Received ACK");
         let AckedDetectionResult {
             acked_bytes,
             spurious_losses,
@@ -718,6 +708,7 @@ impl RecoveryOps for LegacyRecovery {
         if let Some(thresh) = spurious_pkt_thresh {
             self.pkt_thresh =
                 self.pkt_thresh.max(thresh.min(MAX_PACKET_THRESHOLD));
+            self.time_thresh = PACKET_REORDER_TIME_THRESHOLD;
         }
 
         // Undo congestion window update.
@@ -976,9 +967,17 @@ impl RecoveryOps for LegacyRecovery {
         self.rtt() + cmp::max(self.rtt_stats.rttvar * 4, GRANULARITY)
     }
 
+    fn actual_pto(&self) -> Duration {
+        self.pto_duration
+    }
     /// The most recent data delivery rate estimate.
     fn delivery_rate(&self) -> Bandwidth {
         self.congestion.delivery_rate()
+    }
+
+    fn max_bandwidth(&self) -> Option<Bandwidth> {
+        // TODO implement
+        None
     }
 
     /// Statistics from when a CCA first exited the startup phase.
@@ -1046,9 +1045,17 @@ impl RecoveryOps for LegacyRecovery {
         self.pto_count
     }
 
+    fn return_pto_count(&self) -> u64 {
+        self.pto_count as u64
+    }
     #[cfg(test)]
-    fn pkt_thresh(&self) -> u64 {
-        self.pkt_thresh
+    fn pkt_thresh(&self) -> Option<u64> {
+        Some(self.pkt_thresh)
+    }
+
+    #[cfg(test)]
+    fn time_thresh(&self) -> f64 {
+        self.time_thresh
     }
 
     #[cfg(test)]

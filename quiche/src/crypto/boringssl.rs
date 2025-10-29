@@ -93,7 +93,6 @@ impl PacketKey {
         let max_out_len = out_len;
 
         let nonce = make_nonce(&self.nonce, counter);
-
         let rc = unsafe {
             EVP_AEAD_CTX_open(
                 &self.ctx,          // ctx
@@ -108,8 +107,9 @@ impl PacketKey {
                 ad.len(),           // ad_len
             )
         };
-
+        
         if rc != 1 {
+            println!("cryptofail");
             return Err(Error::CryptoFail);
         }
 

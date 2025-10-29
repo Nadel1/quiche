@@ -144,6 +144,8 @@ pub(super) trait CongestionControl: Debug {
 
     fn bandwidth_estimate(&self, rtt_stats: &RttStats) -> Bandwidth;
 
+    fn max_bandwidth(&self) -> Bandwidth;
+
     fn update_mss(&mut self, new_mss: usize);
 
     fn on_app_limited(&mut self, _bytes_in_flight: usize) {}
@@ -243,6 +245,13 @@ pub struct BbrParams {
     /// the initial pacing rate, which is calculated by dividing the
     /// initial cwnd by the first RTT estimate.
     pub initial_pacing_rate_bytes_per_second: Option<u64>,
+
+    /// If true, scale the pacing rate when updating mss when doing pmtud.
+    pub scale_pacing_rate_by_mss: Option<bool>,
+
+    /// Disable `has_stayed_long_enough_in_probe_down` which can cause ProbeDown
+    /// to exit early.
+    pub disable_probe_down_early_exit: Option<bool>,
 }
 
 /// Controls BBR's bandwidth reduction strategy on congestion event.

@@ -448,14 +448,7 @@ pub const MIN_CLIENT_INITIAL_LEN: usize = 1200;
 /// The default initial RTT.
 const DEFAULT_INITIAL_RTT: Duration = Duration::from_millis(420);
 
-#[cfg(not(feature = "fuzzing"))]
 const PAYLOAD_MIN_LEN: usize = 4;
-
-#[cfg(feature = "fuzzing")]
-// Due to the fact that in fuzzing mode we use a zero-length AEAD tag (which
-// would normally be 16 bytes), we need to adjust the minimum payload size to
-// account for that.
-const PAYLOAD_MIN_LEN: usize = 20;
 
 // PATH_CHALLENGE (9 bytes) + AEAD tag (16 bytes).
 const MIN_PROBING_SIZE: usize = 25;
@@ -825,6 +818,7 @@ pub struct Config {
     cc_algorithm: CongestionControlAlgorithm,
     custom_bbr_params: Option<BbrParams>,
     initial_congestion_window_packets: usize,
+    enable_relaxed_loss_threshold: bool,
 
     pmtud: bool,
 
@@ -907,6 +901,7 @@ impl Config {
             custom_bbr_params: None,
             initial_congestion_window_packets:
                 DEFAULT_INITIAL_CONGESTION_WINDOW_PACKETS,
+            enable_relaxed_loss_threshold: false,
             pmtud: false,
             hystart: true,
             pacing: true,
@@ -1162,14 +1157,16 @@ impl Config {
     ///
     /// The default value is infinite, that is, no timeout is used.
     pub fn set_max_idle_timeout(&mut self, v: u64) {
-        self.local_transport_params.max_idle_timeout = v;
+        self.local_transport_params.max_idle_timeout =
+            cmp::min(v, octets::MAX_VAR_INT);
     }
 
     /// Sets the `max_udp_payload_size transport` parameter.
     ///
     /// The default value is `65527`.
     pub fn set_max_recv_udp_payload_size(&mut self, v: usize) {
-        self.local_transport_params.max_udp_payload_size = v as u64;
+        self.local_transport_params.max_udp_payload_size =
+            cmp::min(v as u64, octets::MAX_VAR_INT);
     }
 
     /// Sets the maximum outgoing UDP payload size.
@@ -1192,7 +1189,8 @@ impl Config {
     ///
     /// The default value is `0`.
     pub fn set_initial_max_data(&mut self, v: u64) {
-        self.local_transport_params.initial_max_data = v;
+        self.local_transport_params.initial_max_data =
+            cmp::min(v, octets::MAX_VAR_INT);
     }
 
     /// Sets the `initial_max_stream_data_bidi_local` transport parameter.
@@ -1210,7 +1208,8 @@ impl Config {
     /// The default value is `0`.
     pub fn set_initial_max_stream_data_bidi_local(&mut self, v: u64) {
         self.local_transport_params
-            .initial_max_stream_data_bidi_local = v;
+            .initial_max_stream_data_bidi_local =
+            cmp::min(v, octets::MAX_VAR_INT);
     }
 
     /// Sets the `initial_max_stream_data_bidi_remote` transport parameter.
@@ -1228,7 +1227,8 @@ impl Config {
     /// The default value is `0`.
     pub fn set_initial_max_stream_data_bidi_remote(&mut self, v: u64) {
         self.local_transport_params
-            .initial_max_stream_data_bidi_remote = v;
+            .initial_max_stream_data_bidi_remote =
+            cmp::min(v, octets::MAX_VAR_INT);
     }
 
     /// Sets the `initial_max_stream_data_uni` transport parameter.
@@ -1244,7 +1244,8 @@ impl Config {
     ///
     /// The default value is `0`.
     pub fn set_initial_max_stream_data_uni(&mut self, v: u64) {
-        self.local_transport_params.initial_max_stream_data_uni = v;
+        self.local_transport_params.initial_max_stream_data_uni =
+            cmp::min(v, octets::MAX_VAR_INT);
     }
 
     /// Sets the `initial_max_streams_bidi` transport parameter.
@@ -1265,7 +1266,8 @@ impl Config {
     ///
     /// The default value is `0`.
     pub fn set_initial_max_streams_bidi(&mut self, v: u64) {
-        self.local_transport_params.initial_max_streams_bidi = v;
+        self.local_transport_params.initial_max_streams_bidi =
+            cmp::min(v, octets::MAX_VAR_INT);
     }
 
     /// Sets the `initial_max_streams_uni` transport parameter.
@@ -1284,21 +1286,24 @@ impl Config {
     ///
     /// The default value is `0`.
     pub fn set_initial_max_streams_uni(&mut self, v: u64) {
-        self.local_transport_params.initial_max_streams_uni = v;
+        self.local_transport_params.initial_max_streams_uni =
+            cmp::min(v, octets::MAX_VAR_INT);
     }
 
     /// Sets the `ack_delay_exponent` transport parameter.
     ///
     /// The default value is `3`.
     pub fn set_ack_delay_exponent(&mut self, v: u64) {
-        self.local_transport_params.ack_delay_exponent = v;
+        self.local_transport_params.ack_delay_exponent =
+            cmp::min(v, octets::MAX_VAR_INT);
     }
 
     /// Sets the `max_ack_delay` transport parameter.
     ///
     /// The default value is `25`.
     pub fn set_max_ack_delay(&mut self, v: u64) {
-        self.local_transport_params.max_ack_delay = v;
+        self.local_transport_params.max_ack_delay =
+            cmp::min(v, octets::MAX_VAR_INT);
     }
 
     /// Sets the `active_connection_id_limit` transport parameter.
@@ -1306,7 +1311,8 @@ impl Config {
     /// The default value is `2`. Lower values will be ignored.
     pub fn set_active_connection_id_limit(&mut self, v: u64) {
         if v >= 2 {
-            self.local_transport_params.active_conn_id_limit = v;
+            self.local_transport_params.active_conn_id_limit =
+                cmp::min(v, octets::MAX_VAR_INT);
         }
     }
 
@@ -1361,6 +1367,13 @@ impl Config {
     /// The default value is 10.
     pub fn set_initial_congestion_window_packets(&mut self, packets: usize) {
         self.initial_congestion_window_packets = packets;
+    }
+
+    /// Configure whether to enable relaxed loss detection on spurious loss.
+    ///
+    /// The default value is false.
+    pub fn set_enable_relaxed_loss_threshold(&mut self, enable: bool) {
+        self.enable_relaxed_loss_threshold = enable;
     }
 
     /// Configures whether to enable HyStart++.
@@ -1778,10 +1791,6 @@ pub fn connect(
     server_name: Option<&str>, scid: &ConnectionId, local: SocketAddr,
     peer: SocketAddr, config: &mut Config,
 ) -> Result<Connection> {
-    println!(
-        "----in connect, logging name is: {:?}-----",
-        config.logging_name
-    );
     let mut conn = Connection::new(scid, None, local, peer, config, false)?;
 
     if let Some(server_name) = server_name {
@@ -1997,7 +2006,6 @@ impl<F: BufFactory> Connection<F> {
         scid: &ConnectionId, odcid: Option<&ConnectionId>, local: SocketAddr,
         peer: SocketAddr, config: &mut Config, is_server: bool,
     ) -> Result<Connection<F>> {
-        println!("-----------creating new connection in lib, logging name is {:?}-------------------------",config.logging_name);
         let tls = config.tls_ctx.new_handshake()?;
         Connection::with_tls(scid, odcid, local, peer, config, tls, is_server)
     }
@@ -2301,7 +2309,7 @@ impl<F: BufFactory> Connection<F> {
         self.set_qlog_with_level(writer, title, description, QlogLevel::Base)
     }
 
-    pub fn write_to_log(&self, sent: bool, logging_values: Vec<u64>) {
+    pub fn write_to_log(&self, sent: bool, logging_values: Vec<u128>) {
         use std::io::Write;
         if self.logging_name == "" {
             return;
@@ -2442,7 +2450,8 @@ impl<F: BufFactory> Connection<F> {
     /// The default value is infinite, that is, no timeout is used unless
     /// already configured when creating the connection.
     pub fn set_max_idle_timeout(&mut self, v: u64) -> Result<()> {
-        self.local_transport_params.max_idle_timeout = v;
+        self.local_transport_params.max_idle_timeout =
+            cmp::min(v, octets::MAX_VAR_INT);
 
         self.encode_transport_params()
     }
@@ -2530,6 +2539,27 @@ impl<F: BufFactory> Connection<F> {
         let ex_data = tls::ExData::from_ssl_ref(ssl).ok_or(Error::TlsFail)?;
 
         ex_data.recovery_config.initial_congestion_window_packets = packets;
+
+        Ok(())
+    }
+
+    /// Configure whether to enable relaxed loss detection on spurious loss.
+    ///
+    /// This function can only be called inside one of BoringSSL's handshake
+    /// callbacks, before any packet has been sent. Calling this function any
+    /// other time will have no effect.
+    ///
+    /// See [`Config::set_enable_relaxed_loss_threshold()`].
+    ///
+    /// [`Config::set_enable_relaxed_loss_threshold()`]: struct.Config.html#method.set_enable_relaxed_loss_threshold
+    #[cfg(feature = "boringssl-boring-crate")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "boringssl-boring-crate")))]
+    pub fn set_enable_relaxed_loss_threshold_in_handshake(
+        ssl: &mut boring::ssl::SslRef, enable: bool,
+    ) -> Result<()> {
+        let ex_data = tls::ExData::from_ssl_ref(ssl).ok_or(Error::TlsFail)?;
+
+        ex_data.recovery_config.enable_relaxed_loss_threshold = enable;
 
         Ok(())
     }
@@ -2779,7 +2809,6 @@ impl<F: BufFactory> Connection<F> {
     /// ```
     pub fn recv(&mut self, buf: &mut [u8], info: RecvInfo) -> Result<usize> {
         let len = buf.len();
-
         if len == 0 {
             return Err(Error::BufferTooShort);
         }
@@ -3097,12 +3126,10 @@ impl<F: BufFactory> Connection<F> {
 
             return Err(Error::Done);
         }
-
         if self.is_server && !self.did_version_negotiation {
             if !version_is_supported(hdr.version) {
                 return Err(Error::UnknownVersion);
             }
-
             self.version = hdr.version;
             self.did_version_negotiation = true;
 
@@ -3135,6 +3162,7 @@ impl<F: BufFactory> Connection<F> {
             })? as usize
         };
 
+
         // Make sure the buffer is same or larger than an explicit
         // payload length.
         if payload_len > b.cap() {
@@ -3145,7 +3173,6 @@ impl<F: BufFactory> Connection<F> {
                 &self.trace_id,
             ));
         }
-
         // Derive initial secrets on the server.
         if !self.derived_initial_secrets {
             let (aead_open, aead_seal) = crypto::derive_initial_key_material(
@@ -3172,7 +3199,6 @@ impl<F: BufFactory> Connection<F> {
             // Otherwise use the packet number space's main key.
             self.crypto_ctx[epoch].crypto_open.as_ref()
         };
-
         // Finally, discard packet if no usable key is available.
         let mut aead = match aead {
             Some(v) => v,
@@ -3189,7 +3215,6 @@ impl<F: BufFactory> Connection<F> {
                     // of undecryptable packets as well.
                     let pkt_len = b.off() + payload_len;
                     let pkt = (b.buf()[..pkt_len]).to_vec();
-
                     self.undecryptable_pkts.push_back((pkt, *info));
                     return Ok(pkt_len);
                 }
@@ -3200,7 +3225,6 @@ impl<F: BufFactory> Connection<F> {
                     self.is_server,
                     &self.trace_id,
                 );
-
                 return Err(e);
             },
         };
@@ -3248,7 +3272,6 @@ impl<F: BufFactory> Connection<F> {
             {
                 aead = &key_update.crypto_open;
             } else {
-                trace!("{} peer-initiated key update", self.trace_id);
 
                 aead_next = Some((
                     self.crypto_ctx[epoch]
@@ -3269,6 +3292,7 @@ impl<F: BufFactory> Connection<F> {
             }
         }
 
+        //SOMETHING GOES WRONG AFTER THIS PRINT!!!
         let mut payload = packet::decrypt_pkt(
             &mut b,
             pn,
@@ -3289,7 +3313,6 @@ impl<F: BufFactory> Connection<F> {
         if payload.cap() == 0 {
             return Err(Error::InvalidPacket);
         }
-
         // Now that we decrypted the packet, let's see if we can map it to an
         // existing path.
         let recv_pid = if hdr.ty == Type::Short && self.got_peer_conn_id {
@@ -3299,7 +3322,6 @@ impl<F: BufFactory> Connection<F> {
             // During handshake, we are on the initial path.
             self.paths.get_active_path_id()?
         };
-
         // The key update is verified once a packet is successfully decrypted
         // using the new keys.
         if let Some((open_next, seal_next)) = aead_next {
@@ -3311,8 +3333,6 @@ impl<F: BufFactory> Connection<F> {
                 // Peer has updated keys twice without awaiting confirmation.
                 return Err(Error::KeyUpdate);
             }
-
-            trace!("{} key update verified", self.trace_id);
 
             let _ = self.crypto_ctx[epoch].crypto_seal.replace(seal_next);
 
@@ -3402,6 +3422,7 @@ impl<F: BufFactory> Connection<F> {
         // whether this is a non-probing packet.
         let mut probing = true;
 
+        let initial_payload_capacity=payload.cap();
         // Process packet payload.
         while payload.cap() > 0 {
             let frame = frame::Frame::from_bytes(&mut payload, hdr.ty)?;
@@ -3703,10 +3724,19 @@ impl<F: BufFactory> Connection<F> {
         let path = self.paths.get_mut(recv_pid)?;
         // It's fine to set the skip counter based on a non-active path's values.
         let cwnd = path.recovery.cwnd();
-        let rtt = path.recovery.rtt().as_secs();
+        let rtt = path.recovery.rtt().as_micros();
         let bytes_in_flight = path.recovery.bytes_in_flight();
-        let logging_values =
-            vec![pn, read as u64, cwnd as u64, bytes_in_flight as u64, rtt,path.recovery.pto().as_secs()];
+        let logging_values = vec![
+            pn as u128,
+            read as u128,
+            cwnd as u128,
+            bytes_in_flight as u128,
+            rtt as u128,
+            path.recovery.actual_pto().as_micros(),
+            path.recovery.rttvar().as_micros(),
+            path.recovery.return_pto_count() as u128,
+            initial_payload_capacity as u128
+        ];
         self.write_to_log(false, logging_values);
 
         Ok(read)
@@ -3983,8 +4013,6 @@ impl<F: BufFactory> Connection<F> {
             return Err(Error::Done);
         }
 
-        // Pad UDP datagram if it contains a QUIC Initial packet.
-        #[cfg(not(feature = "fuzzing"))]
         if has_initial && left > 0 && done < MIN_CLIENT_INITIAL_LEN {
             let pad_len = cmp::min(left, MIN_CLIENT_INITIAL_LEN - done);
 
@@ -4303,11 +4331,17 @@ impl<F: BufFactory> Connection<F> {
                     && self.local_error.as_ref().is_some_and(|le| le.is_app)))
             && path.active()
         {
+            #[cfg(not(feature = "fuzzing"))]
             let ack_delay = pkt_space.largest_rx_pkt_time.elapsed();
 
-            let ack_delay = ack_delay.as_micros() as u64
-                / 2_u64
+            #[cfg(not(feature = "fuzzing"))]
+            let ack_delay = ack_delay.as_micros() as u64 /
+                2_u64
                     .pow(self.local_transport_params.ack_delay_exponent as u32);
+
+            // pseudo-random reproducible ack delays when fuzzing
+            #[cfg(feature = "fuzzing")]
+            let ack_delay = rand::rand_u8() as u64 + 1;
 
             let frame = frame::Frame::ACK {
                 ack_delay,
@@ -4446,6 +4480,7 @@ impl<F: BufFactory> Connection<F> {
             }
 
             if let Some(key_update) = crypto_ctx.key_update.as_mut() {
+                println!("send key_update");
                 key_update.update_acked = true;
             }
         }
@@ -5225,16 +5260,18 @@ impl<F: BufFactory> Connection<F> {
         }
         let cwnd = active_path.recovery.cwnd();
 
-        let rtt = active_path.recovery.rtt().as_secs();
+        let rtt = active_path.recovery.rtt().as_micros();
         let bytes_in_flight = active_path.recovery.bytes_in_flight();
 
         let logging_values = vec![
-            pn,
-            packet_size as u64,
-            cwnd as u64,
-            bytes_in_flight as u64,
-            rtt,
-            active_path.recovery.pto().as_secs()
+            pn as u128,
+            packet_size as u128,
+            cwnd as u128,
+            bytes_in_flight as u128,
+            rtt as u128,
+            active_path.recovery.actual_pto().as_micros(),
+            active_path.recovery.rttvar().as_micros(),
+            active_path.recovery.return_pto_count() as u128
         ];
         self.write_to_log(true, logging_values);
 
@@ -6508,7 +6545,6 @@ impl<F: BufFactory> Connection<F> {
                 .key_update
                 .as_ref()
                 .map(|key_update| key_update.timer);
-
             let timers = [self.idle_timer, path_timer, key_update_timer];
 
             timers.iter().filter_map(|&x| x).min()
@@ -7151,9 +7187,10 @@ impl<F: BufFactory> Connection<F> {
         ConnectionId::from_ref(e.cid.as_ref())
     }
 
-    /// Returns the PMTU for the active path if it exists. This requires no
-    /// additonal packets to be sent but simply checks if PMTUD has completed
-    /// and has found a valid PMTU.
+    /// Returns the PMTU for the active path if it exists.
+    ///
+    /// This requires no additonal packets to be sent but simply checks if PMTUD
+    /// has completed and has found a valid PMTU.
     #[inline]
     pub fn pmtu(&self) -> Option<usize> {
         if let Ok(path) = self.paths.get_active() {
@@ -7744,8 +7781,8 @@ impl<F: BufFactory> Connection<F> {
                 let largest_acked = ranges.last().expect(
                     "ACK frames should always have at least one ack range",
                 );
-
                 for (_, p) in self.paths.iter_mut() {
+                    
                     if self.pkt_num_spaces[epoch]
                         .largest_tx_pkt_num
                         .is_some_and(|largest_sent| largest_sent < largest_acked)
@@ -7760,7 +7797,6 @@ impl<F: BufFactory> Connection<F> {
                     if is_app_limited {
                         p.recovery.delivery_rate_update_app_limited(true);
                     }
-
                     let OnAckReceivedOutcome {
                         lost_packets,
                         lost_bytes,
@@ -8733,8 +8769,6 @@ fn drop_pkt_on_err(
         return e;
     }
 
-    trace!("{trace_id} dropped invalid packet");
-
     // Ignore other invalid packets that haven't been authenticated to prevent
     // man-in-the-middle and man-on-the-side attacks.
     Error::Done
@@ -9209,6 +9243,7 @@ impl TransportParams {
         };
 
         if tp.max_idle_timeout != 0 {
+            assert!(tp.max_idle_timeout <= octets::MAX_VAR_INT);
             TransportParams::encode_param(
                 &mut b,
                 0x0001,
@@ -9225,6 +9260,7 @@ impl TransportParams {
         }
 
         if tp.max_udp_payload_size != 0 {
+            assert!(tp.max_udp_payload_size <= octets::MAX_VAR_INT);
             TransportParams::encode_param(
                 &mut b,
                 0x0003,
@@ -9234,6 +9270,7 @@ impl TransportParams {
         }
 
         if tp.initial_max_data != 0 {
+            assert!(tp.initial_max_data <= octets::MAX_VAR_INT);
             TransportParams::encode_param(
                 &mut b,
                 0x0004,
@@ -9243,6 +9280,7 @@ impl TransportParams {
         }
 
         if tp.initial_max_stream_data_bidi_local != 0 {
+            assert!(tp.initial_max_stream_data_bidi_local <= octets::MAX_VAR_INT);
             TransportParams::encode_param(
                 &mut b,
                 0x0005,
@@ -9252,6 +9290,9 @@ impl TransportParams {
         }
 
         if tp.initial_max_stream_data_bidi_remote != 0 {
+            assert!(
+                tp.initial_max_stream_data_bidi_remote <= octets::MAX_VAR_INT
+            );
             TransportParams::encode_param(
                 &mut b,
                 0x0006,
@@ -9261,6 +9302,7 @@ impl TransportParams {
         }
 
         if tp.initial_max_stream_data_uni != 0 {
+            assert!(tp.initial_max_stream_data_uni <= octets::MAX_VAR_INT);
             TransportParams::encode_param(
                 &mut b,
                 0x0007,
@@ -9270,6 +9312,7 @@ impl TransportParams {
         }
 
         if tp.initial_max_streams_bidi != 0 {
+            assert!(tp.initial_max_streams_bidi <= octets::MAX_VAR_INT);
             TransportParams::encode_param(
                 &mut b,
                 0x0008,
@@ -9279,6 +9322,7 @@ impl TransportParams {
         }
 
         if tp.initial_max_streams_uni != 0 {
+            assert!(tp.initial_max_streams_uni <= octets::MAX_VAR_INT);
             TransportParams::encode_param(
                 &mut b,
                 0x0009,
@@ -9288,6 +9332,7 @@ impl TransportParams {
         }
 
         if tp.ack_delay_exponent != 0 {
+            assert!(tp.ack_delay_exponent <= octets::MAX_VAR_INT);
             TransportParams::encode_param(
                 &mut b,
                 0x000a,
@@ -9297,6 +9342,7 @@ impl TransportParams {
         }
 
         if tp.max_ack_delay != 0 {
+            assert!(tp.max_ack_delay <= octets::MAX_VAR_INT);
             TransportParams::encode_param(
                 &mut b,
                 0x000b,
@@ -9312,6 +9358,7 @@ impl TransportParams {
         // TODO: encode preferred_address
 
         if tp.active_conn_id_limit != 2 {
+            assert!(tp.active_conn_id_limit <= octets::MAX_VAR_INT);
             TransportParams::encode_param(
                 &mut b,
                 0x000e,
@@ -9333,6 +9380,7 @@ impl TransportParams {
         }
 
         if let Some(max_datagram_frame_size) = tp.max_datagram_frame_size {
+            assert!(max_datagram_frame_size <= octets::MAX_VAR_INT);
             TransportParams::encode_param(
                 &mut b,
                 0x0020,

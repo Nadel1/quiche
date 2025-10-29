@@ -115,7 +115,7 @@ async fn handle_connection(mut controller: ServerH3Controller) {
                 }
             },
             event => {
-                log::info!("event: {event:?}");
+                println!("event: {event:?}");
             },
         }
     }

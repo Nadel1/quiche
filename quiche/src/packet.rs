@@ -64,8 +64,8 @@ const RETRY_AEAD_ALG: crypto::Algorithm = crypto::Algorithm::AES128_GCM;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub enum Epoch {
-    Initial     = 0,
-    Handshake   = 1,
+    Initial = 0,
+    Handshake = 1,
     Application = 2,
 }
 
@@ -174,8 +174,9 @@ impl Type {
 
             Type::ZeroRTT => qlog::events::quic::PacketType::ZeroRtt,
 
-            Type::VersionNegotiation =>
-                qlog::events::quic::PacketType::VersionNegotiation,
+            Type::VersionNegotiation => {
+                qlog::events::quic::PacketType::VersionNegotiation
+            },
 
             Type::Short => qlog::events::quic::PacketType::OneRtt,
         }
@@ -622,7 +623,7 @@ pub fn decrypt_hdr(
     first_buf.as_mut()[0] = first;
 
     hdr.pkt_num = pn;
-    
+
     hdr.pkt_num_len = pn_len;
 
     if hdr.ty == Type::Short {
@@ -659,16 +660,12 @@ pub fn decrypt_pkt<'a>(
     let payload_offset = b.off();
 
     let (header, mut payload) = b.split_at(payload_offset)?;
-
     let payload_len = payload_len
         .checked_sub(pn_len)
         .ok_or(Error::InvalidPacket)?;
-
     let mut ciphertext = payload.peek_bytes_mut(payload_len)?;
-
     let payload_len =
         aead.open_with_u64_counter(pn, header.as_ref(), ciphertext.as_mut())?;
-
     Ok(b.get_bytes(payload_len)?)
 }
 
@@ -811,8 +808,9 @@ fn compute_retry_integrity_tag(
     ];
 
     let (key, nonce) = match version {
-        crate::PROTOCOL_VERSION_V1 =>
-            (&RETRY_INTEGRITY_KEY_V1, RETRY_INTEGRITY_NONCE_V1),
+        crate::PROTOCOL_VERSION_V1 => {
+            (&RETRY_INTEGRITY_KEY_V1, RETRY_INTEGRITY_NONCE_V1)
+        },
 
         _ => (&RETRY_INTEGRITY_KEY_V1, RETRY_INTEGRITY_NONCE_V1),
     };
@@ -1111,9 +1109,9 @@ impl PktNumManager {
         //
         // curr_pn
         //  |
-        //  v               |-lower-|
-        // [c x x x x x x x x x x x s s s s s s s s s s x x]
-        //    |--min_skip---|       |---skip_range----|
+        //  v                 |--- (upper - lower) ---|
+        // [c x x x x x x x x s s s s s s s s s s s s s x x]
+        //    |--min_skip---| |------skip_range-------|
         //
         //```
         let skip_pn_counter = MIN_SKIP_COUNTER_VALUE + lower + rand_skip_value;
