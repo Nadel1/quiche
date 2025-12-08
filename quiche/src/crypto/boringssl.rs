@@ -110,6 +110,7 @@ impl PacketKey {
         };
 
         if rc != 1 {
+            println!("<CryptoFail>");
             return Err(Error::CryptoFail);
         }
 
