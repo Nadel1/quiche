@@ -1,46 +1,35 @@
 use foundations::telemetry::log;
-use futures::{SinkExt as _, StreamExt as _};
+use futures::SinkExt as _;
+use futures::StreamExt as _;
 use quiche::h3::NameValue;
-use std::str::from_utf8;
-use std::time::Duration;
-use tokio_quiche::args::*;
+use quiche::h3::Priority;
 use tokio_quiche::buf_factory::BufFactory;
-use tokio_quiche::http3::driver::{
-    H3Event, IncomingH3Headers, OutboundFrame, ServerH3Event,
-};
+use tokio_quiche::http3::driver::H3Event;
+use tokio_quiche::http3::driver::IncomingH3Headers;
+use tokio_quiche::http3::driver::OutboundFrame;
+use tokio_quiche::http3::driver::ServerH3Event;
 use tokio_quiche::http3::settings::Http3Settings;
 use tokio_quiche::listen;
+use std::str::from_utf8;
 use tokio_quiche::metrics::DefaultMetrics;
 use tokio_quiche::quic::SimpleConnectionIdGenerator;
 use tokio_quiche::quiche::h3;
-use tokio_quiche::settings::QuicSettings;
-use tokio_quiche::{ConnectionParams, ServerH3Controller, ServerH3Driver};
-
-use quiche::h3::Priority;
+use tokio_quiche::ConnectionParams;
+use tokio_quiche::ServerH3Controller;
+use tokio_quiche::ServerH3Driver;
 
 #[tokio::main]
 async fn main() -> tokio_quiche::QuicResult<()> {
-    // Parse CLI parameters.
-    let docopt = docopt::Docopt::new(SERVER_USAGE).unwrap();
-    let conn_args = CommonArgs::with_docopt(&docopt);
-    let args = ServerArgs::with_docopt(&docopt);
+    let socket = tokio::net::UdpSocket::bind("127.0.0.1:4043").await?;
 
-    let bind_to: String = args.listen.parse().unwrap();
-    let socket = tokio::net::UdpSocket::bind(bind_to).await?;
-    let mut settings = QuicSettings::default();
-    settings.max_idle_timeout =
-        Some(Duration::from_millis(conn_args.idle_timeout));
-    settings.initial_rtt = Some(conn_args.initial_rtt);
-    settings.disable_client_ip_validation = args.no_retry;
-    settings.cc_algorithm = conn_args.cc_algorithm;
-    settings.initial_congestion_window_packets = conn_args.initial_cwnd_packets.try_into().unwrap();
+
     let mut listeners = listen(
         [socket],
         ConnectionParams::new_server(
-            settings,
+            Default::default(),
             tokio_quiche::settings::TlsCertificatePaths {
-                cert: &args.cert,
-                private_key: &args.key,
+                cert: "src/bin/cert.crt",
+                private_key: "src/bin/cert.key",
                 kind: tokio_quiche::settings::CertificateKind::X509,
             },
             Default::default(),
@@ -48,6 +37,7 @@ async fn main() -> tokio_quiche::QuicResult<()> {
         SimpleConnectionIdGenerator,
         DefaultMetrics,
     )?;
+
     let accept_stream = &mut listeners[0];
 
     while let Some(conn) = accept_stream.next().await {
@@ -57,7 +47,9 @@ async fn main() -> tokio_quiche::QuicResult<()> {
     }
     Ok(())
 }
+
 async fn handle_connection(mut controller: ServerH3Controller) {
+    println!("in handle connection");
     while let Some(ServerH3Event::Core(event)) =
         controller.event_receiver_mut().recv().await
     {
@@ -77,8 +69,9 @@ async fn handle_connection(mut controller: ServerH3Controller) {
                 .unwrap();
 
                 let request = &headers;
-                // source: turbo-quiche
+ 
                 for hdr in request {
+                    println!("header: {hdr:?}");
                     match hdr.name() {
                         b":path" => {
                             let path = Some(from_utf8(hdr.value()).unwrap());
