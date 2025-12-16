@@ -18,7 +18,7 @@ async fn main() -> tokio_quiche::QuicResult<()> {
             request_id: 0,
             headers: vec![
                 h3::Header::new(b":method", b"GET"),
-                h3::Header::new(b":path",b"/Cargo.toml"),
+                h3::Header::new(b":path",b"Cargo.toml"),
             ],
             body_writer: None,
         })
