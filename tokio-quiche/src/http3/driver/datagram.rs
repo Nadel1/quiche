@@ -60,7 +60,7 @@ pub(crate) fn extract_flow_id(
             break;
         }
     }
-
+    println!("method is: {:?} and protocol is {:?} and flow_id is {:?}", method, protocol, datagram_flow_id);
     // draft-ietf-masque-connect-udp-03 CONNECT-UDP
     if method == Some(b"CONNECT-UDP") && datagram_flow_id.is_some() {
         datagram_flow_id

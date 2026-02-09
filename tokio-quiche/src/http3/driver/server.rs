@@ -175,12 +175,12 @@ impl ServerHooks {
         driver: &mut H3Driver<Self>, qconn: &mut QuicheConnection,
         headers: InboundHeaders,
     ) -> H3ConnectionResult<()> {
+        println!("Handling request");
         let InboundHeaders {
             stream_id,
             headers,
             has_body,
         } = headers;
-
         // Multiple HEADERS frames can be received on a single stream, but only
         // the first one is an actual request. For now ignore any additional
         // HEADERS (e.g. "trailers").
@@ -284,6 +284,7 @@ impl DriverHooks for ServerHooks {
         driver: &mut H3Driver<Self>, qconn: &mut QuicheConnection,
         headers: InboundHeaders,
     ) -> H3ConnectionResult<()> {
+        println!("in headers received");
         if driver
             .hooks
             .settings_enforcer

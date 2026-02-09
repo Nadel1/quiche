@@ -476,7 +476,6 @@ fn handle_stream(client: &mut Client, stream_id: u64, buf: &[u8], root: &str) {
             body.len(),
             stream_id
         );
-
         let written = match conn.stream_send(stream_id, &body, true) {
             Ok(v) => v,
 

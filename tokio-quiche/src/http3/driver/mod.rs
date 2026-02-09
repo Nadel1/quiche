@@ -463,9 +463,11 @@ impl<H: DriverHooks> H3Driver<H> {
             };
 
             let try_reserve_result = sender.try_reserve();
+            println!("processing h3 data");
             let permit = match try_reserve_result {
                 Ok(permit) => permit,
                 Err(TrySendError::Closed(())) => {
+                    println!("Connection has closed, send request cancelled---this is not called---");
                     // The channel has closed before we delivered a fin or reset
                     // to the application.
                     if !ctx.fin_or_reset_recv &&
@@ -607,6 +609,7 @@ impl<H: DriverHooks> H3Driver<H> {
 
         // Communicate fin to upstream. Since `ctx.fin_recv` is true now,
         // there can't be a recursive loop.
+        println!("communicating the fin!");
         self.process_h3_data(qconn, stream_id)
     }
 
@@ -617,7 +620,7 @@ impl<H: DriverHooks> H3Driver<H> {
         &mut self, qconn: &mut QuicheConnection, stream_id: u64, event: h3::Event,
     ) -> H3ConnectionResult<()> {
         self.forward_settings()?;
-
+        println!("Event: {:?}",event);
         match event {
             // Requests/responses are exclusively handled by hooks.
             h3::Event::Headers { list, more_frames } =>
@@ -1136,6 +1139,7 @@ impl<H: DriverHooks> H3Driver<H> {
             match recv.try_recv() {
                 Ok(frame) => ctx.queued_frame = Some(frame),
                 Err(TryRecvError::Disconnected) => {
+                    println!("processing writable stram, disconnected---this is called----");
                     if !ctx.fin_or_reset_sent &&
                         ctx.associated_dgram_flow_id.is_none()
                     // The channel might be closed if the stream was used to
@@ -1147,6 +1151,7 @@ impl<H: DriverHooks> H3Driver<H> {
                         // The channel closed without having written a fin. Send a
                         // RESET_STREAM to indicate we won't be writing anything
                         // else
+                        println!("Cancel request");
                         let err = h3::WireErrorCode::RequestCancelled as u64;
                         let _ = qconn.stream_shutdown(
                             stream_id,

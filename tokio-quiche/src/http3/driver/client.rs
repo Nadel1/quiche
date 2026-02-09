@@ -170,10 +170,13 @@ impl ClientHooks {
                 "stream_id" => stream_id,
                 "flow_id" => flow_id,
             );
+            
             let _ = driver.get_or_insert_flow(flow_id)?;
             stream_ctx.associated_dgram_flow_id = Some(flow_id);
         }
-
+        println!(" stream_id is {:?} and request.headers is {:?}", stream_id,&request.headers);
+        println!("Client hooks, associated_dgram_flow_id is set to {:?}",stream_ctx.associated_dgram_flow_id);
+        println!("Request: {:?}",request);
         if let Some(body_writer) = request.body_writer {
             let _ = body_writer.send(send.clone());
             driver
@@ -215,7 +218,7 @@ impl ClientHooks {
             // todo(fisher): send better error to client
             return Err(H3ConnectionError::NonexistentStream);
         };
-
+        
         let headers = IncomingH3Headers {
             stream_id,
             headers,
@@ -224,7 +227,6 @@ impl ClientHooks {
             read_fin: !has_body,
             h3_audit_stats: Arc::clone(&stream_ctx.audit_stats),
         };
-
         driver
             .h3_event_sender
             .send(H3Event::IncomingHeaders(headers).into())

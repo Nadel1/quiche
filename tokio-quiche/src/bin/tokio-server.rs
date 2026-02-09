@@ -53,6 +53,7 @@ async fn handle_connection(mut controller: ServerH3Controller) {
     while let Some(ServerH3Event::Core(event)) =
         controller.event_receiver_mut().recv().await
     {
+        println!("event: {:?}",event);
         match event {
             H3Event::IncomingHeaders(IncomingH3Headers {
                 mut send,
@@ -63,7 +64,7 @@ async fn handle_connection(mut controller: ServerH3Controller) {
                 log::info!("incomming headers"; "headers" => ?headers);
                 send.send(OutboundFrame::Headers(
                     vec![h3::Header::new(b":status", b"200")],
-                    Some(Priority::new(0, false)),
+                    Some(Priority::new(0, true)),
                 ))
                 .await
                 .unwrap();

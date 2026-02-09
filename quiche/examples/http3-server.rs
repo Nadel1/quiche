@@ -507,7 +507,7 @@ fn handle_request(
     stream_id: u64, headers: &[quiche::h3::Header],
     partial_responses: &mut HashMap<u64, PartialResponse>, root: &str,
 ) {
-    info!(
+    println!(
         "{} got request {:?} on stream id {}",
         conn.trace_id(),
         hdrs_to_strings(headers),

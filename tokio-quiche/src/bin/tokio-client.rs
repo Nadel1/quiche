@@ -17,8 +17,7 @@ async fn main() -> tokio_quiche::QuicResult<()> {
         .send(tokio_quiche::http3::driver::NewClientRequest {
             request_id: 0,
             headers: vec![
-                h3::Header::new(b":method", b"GET"),
-                h3::Header::new(b":path",b"Cargo.toml"),
+                h3::Header::new(b":method", b"GET README.md"),
             ],
             body_writer: None,
         })
