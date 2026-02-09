@@ -284,7 +284,6 @@ impl DriverHooks for ServerHooks {
         driver: &mut H3Driver<Self>, qconn: &mut QuicheConnection,
         headers: InboundHeaders,
     ) -> H3ConnectionResult<()> {
-        println!("in headers received");
         if driver
             .hooks
             .settings_enforcer

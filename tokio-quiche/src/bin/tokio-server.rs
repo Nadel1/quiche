@@ -28,8 +28,8 @@ async fn main() -> tokio_quiche::QuicResult<()> {
         ConnectionParams::new_server(
             Default::default(),
             tokio_quiche::settings::TlsCertificatePaths {
-                cert: "src/bin/cert.crt",
-                private_key: "src/bin/cert.key",
+                cert: "tokio-quiche/src/bin/cert.crt",
+                private_key: "tokio-quiche/src/bin/cert.key",
                 kind: tokio_quiche::settings::CertificateKind::X509,
             },
             Default::default(),
@@ -90,7 +90,7 @@ async fn handle_connection(mut controller: ServerH3Controller) {
                             assert_eq!(from_utf8(hdr.value()).unwrap(), "GET")
                         },
                         b":scheme" => {
-                            assert_eq!(from_utf8(hdr.value()).unwrap(), "https")
+                            assert_eq!(from_utf8(hdr.value()).unwrap(), "http")
                         },
                         b":authority" => {
                             //TODO

@@ -463,7 +463,6 @@ impl<H: DriverHooks> H3Driver<H> {
             };
 
             let try_reserve_result = sender.try_reserve();
-            println!("processing h3 data");
             let permit = match try_reserve_result {
                 Ok(permit) => permit,
                 Err(TrySendError::Closed(())) => {
@@ -609,7 +608,6 @@ impl<H: DriverHooks> H3Driver<H> {
 
         // Communicate fin to upstream. Since `ctx.fin_recv` is true now,
         // there can't be a recursive loop.
-        println!("communicating the fin!");
         self.process_h3_data(qconn, stream_id)
     }
 
@@ -620,7 +618,7 @@ impl<H: DriverHooks> H3Driver<H> {
         &mut self, qconn: &mut QuicheConnection, stream_id: u64, event: h3::Event,
     ) -> H3ConnectionResult<()> {
         self.forward_settings()?;
-        println!("Event: {:?}",event);
+        println!("Event: {:?} on stream_id {:?}",event,stream_id);
         match event {
             // Requests/responses are exclusively handled by hooks.
             h3::Event::Headers { list, more_frames } =>
@@ -631,7 +629,7 @@ impl<H: DriverHooks> H3Driver<H> {
                 }),
 
             h3::Event::Data => self.process_h3_data(qconn, stream_id),
-            h3::Event::Finished => self.process_h3_fin(qconn, stream_id),
+            h3::Event::Finished =>self.process_h3_fin(qconn, stream_id),
 
             h3::Event::Reset(code) => {
                 if let Some(ctx) = self.stream_map.get_mut(&stream_id) {

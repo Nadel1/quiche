@@ -17,7 +17,11 @@ async fn main() -> tokio_quiche::QuicResult<()> {
         .send(tokio_quiche::http3::driver::NewClientRequest {
             request_id: 0,
             headers: vec![
-                h3::Header::new(b":method", b"GET README.md"),
+                h3::Header::new(b":method", b"GET"),
+                h3::Header::new(b":scheme",b"http"),
+                h3::Header::new(b":authority",b"127.0.0.1:4433"),
+                h3::Header::new(b":path",b"./README.md"),
+                h3::Header::new(b"user-agent",b"quiche")
             ],
             body_writer: None,
         })
