@@ -5,12 +5,47 @@ use tokio_quiche::http3::driver::InboundFrame;
 use tokio_quiche::http3::driver::IncomingH3Headers;
 use tokio_quiche::quiche::h3;
 
+
+/// Makes a buffered writer for a qlog.
+pub fn make_qlog_writer(
+    dir: &std::ffi::OsStr, role: &str, id: &str,
+) -> std::io::BufWriter<std::fs::File> {
+    let mut path = std::path::PathBuf::from(dir);
+    let filename = format!("{role}-{id}.sqlog");
+    path.push(filename);
+
+    match std::fs::File::create(&path) {
+        Ok(f) => std::io::BufWriter::new(f),
+
+        Err(e) =>
+            panic!("Error creating qlog file attempted path was {path:?}: {e}"),
+    }
+}
+
+
 #[tokio::main]
 async fn main() -> tokio_quiche::QuicResult<()> {
     let socket = tokio::net::UdpSocket::bind("0.0.0.0:49852").await?;
-    socket.connect("192.168.0.141:4433").await?;
+    socket.connect("127.0.0.1:4433").await?;
 
-    let (_, mut controller) = tokio_quiche::quic::connect(socket, None).await?;
+    let (mut connection, mut controller) = tokio_quiche::quic::connect(socket, None).await?;
+
+    // Only bother with qlog if the user specified it.
+    #[cfg(feature = "qlog")]
+    {
+        println!("QLOG");
+        if let Some(dir) = std::env::var_os("QLOGDIR") {
+            let scid=[0; quiche::MAX_CONN_ID_LEN].to_vec();
+            let id = format!("{scid:?}");
+            let writer = make_qlog_writer(&dir, "client", &id);
+
+            connection.set_qlog(
+                std::boxed::Box::new(writer),
+                "quiche-client qlog".to_string(),
+                format!("{} id={}", "quiche-client qlog", id),
+            );
+        }
+    }
 
     controller
         .request_sender()
@@ -18,7 +53,7 @@ async fn main() -> tokio_quiche::QuicResult<()> {
             request_id: 0,
             headers: vec![
                 h3::Header::new(b":method", b"GET"),
-                h3::Header::new(b":path","README.md".as_bytes())
+                h3::Header::new(b":path", "README.md".as_bytes()),
             ],
             body_writer: None,
         })

@@ -11,6 +11,11 @@ readme = "README.md"
 rust-version = "1.85"
 
 [features]
+# Enable qlog support.
+
+# Enable qlog support with serde_json for extension data
+qlog = ["dep:qlog", "dep:serde_json"]
+
 # Forwarded quiche features for re-exports
 fuzzing = ["quiche/fuzzing"]
 quiche_internal = ["quiche/internal"]
@@ -34,9 +39,15 @@ capture_keylogs = []
 # Enable scheduling & poll duration histograms for tokio tasks.
 tokio-task-metrics = []
 
+default=["qlog"]
 [lints.rust]
 # capture_keylogs: enable SSLKEYLOGFILE capturing for QUIC connections.
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(capture_keylogs)'] }
+
+[package.metadata.docs.rs]
+no-default-features = true
+features = ["qlog"]
+
 
 [dependencies]
 docopt="1"
@@ -54,6 +65,8 @@ ipnetwork = { workspace = true }
 log = { workspace = true }
 octets = { workspace = true }
 pin-project = { workspace = true }
+qlog = { workspace = true, optional = true }
+serde_json = { version = "1.0", optional = true }
 quiche = { workspace = true, features = ["boringssl-boring-crate", "qlog"] }
 serde = { workspace = true, features = ["derive", "rc"] }
 serde_with = { workspace = true }
