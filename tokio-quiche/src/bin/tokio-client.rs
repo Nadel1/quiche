@@ -7,8 +7,8 @@ use tokio_quiche::quiche::h3;
 
 #[tokio::main]
 async fn main() -> tokio_quiche::QuicResult<()> {
-    let socket = tokio::net::UdpSocket::bind("0.0.0.0:0").await?;
-    socket.connect("127.0.0.1:4043").await?;
+    let socket = tokio::net::UdpSocket::bind("0.0.0.0:49852").await?;
+    socket.connect("192.168.0.141:4433").await?;
 
     let (_, mut controller) = tokio_quiche::quic::connect(socket, None).await?;
 
@@ -18,10 +18,7 @@ async fn main() -> tokio_quiche::QuicResult<()> {
             request_id: 0,
             headers: vec![
                 h3::Header::new(b":method", b"GET"),
-                h3::Header::new(b":scheme",b"http"),
-                h3::Header::new(b":authority",b"127.0.0.1:4433"),
-                h3::Header::new(b":path",b"./README.md"),
-                h3::Header::new(b"user-agent",b"quiche")
+                h3::Header::new(b":path","README.md".as_bytes())
             ],
             body_writer: None,
         })

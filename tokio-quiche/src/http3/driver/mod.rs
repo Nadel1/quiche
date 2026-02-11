@@ -618,7 +618,7 @@ impl<H: DriverHooks> H3Driver<H> {
         &mut self, qconn: &mut QuicheConnection, stream_id: u64, event: h3::Event,
     ) -> H3ConnectionResult<()> {
         self.forward_settings()?;
-        println!("Event: {:?} on stream_id {:?}",event,stream_id);
+        println!("Event: {:?} on stream_id {:?} and connection: {:?}",event,stream_id,qconn.stats());
         match event {
             // Requests/responses are exclusively handled by hooks.
             h3::Event::Headers { list, more_frames } =>
