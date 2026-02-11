@@ -323,9 +323,7 @@ pub struct QuicSettings {
     ///
     /// [`enable_track_unknown_transport_parameters()`]: https://docs.rs/quiche/latest/quiche/struct.Config.html#method.enable_track_unknown_transport_parameters
     pub track_unknown_transport_parameters: Option<usize>,
-    /// Make initial rtt configurable
-    #[serde(default = "QuicSettings::default_initial_rtt")]
-    pub initial_rtt: Option<Duration>,
+
 }
 
 impl QuicSettings {
