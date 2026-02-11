@@ -20,7 +20,7 @@ use tokio_quiche::ServerH3Driver;
 
 #[tokio::main]
 async fn main() -> tokio_quiche::QuicResult<()> {
-    let socket = tokio::net::UdpSocket::bind("127.0.0.1:4043").await?;
+    let socket = tokio::net::UdpSocket::bind("0.0.0.0:4433").await?;
 
 
     let mut listeners = listen(
