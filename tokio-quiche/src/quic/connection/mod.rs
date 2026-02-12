@@ -24,7 +24,6 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-
 mod error;
 mod id;
 mod map;
@@ -44,20 +43,6 @@ use datagram_socket::SocketStats;
 use foundations::telemetry::log;
 use futures::future::BoxFuture;
 use futures::Future;
-use quiche::ConnectionId;
-#[cfg(feature = "qlog")]
-use quiche::QlogLevel;
-use std::fmt;
-use std::io;
-use std::net::SocketAddr;
-use std::sync::Arc;
-use std::sync::Mutex;
-use std::task::Poll;
-use std::time::Duration;
-use std::time::Instant;
-use std::time::SystemTime;
-use tokio::sync::mpsc;
-use tokio_util::task::AbortOnDropHandle;
 #[cfg(feature = "qlog")]
 use qlog::events::connectivity::ConnectivityEventType;
 #[cfg(feature = "qlog")]
@@ -78,8 +63,21 @@ use qlog::events::EventImportance;
 use qlog::events::EventType;
 #[cfg(feature = "qlog")]
 use qlog::events::RawInfo;
-
-
+use quiche::ConnectionId;
+#[cfg(feature = "qlog")]
+use quiche::QlogLevel;
+use quiche::TransportParams;
+use std::fmt;
+use std::io;
+use std::net::SocketAddr;
+use std::sync::Arc;
+use std::sync::Mutex;
+use std::task::Poll;
+use std::time::Duration;
+use std::time::Instant;
+use std::time::SystemTime;
+use tokio::sync::mpsc;
+use tokio_util::task::AbortOnDropHandle;
 
 use self::error::make_handshake_result;
 use super::io::connection_stage::Close;
@@ -352,8 +350,8 @@ where
             stats: Arc::clone(&self.stats),
             scid: self.params.scid,
             #[cfg(feature = "qlog")]
-            qlog:Default::default(),
-            is_server:false
+            qlog: Default::default(),
+            is_server: false,
         };
         let context = ConnectionStageContext {
             in_pkt: self.params.initial_pkt,
@@ -643,17 +641,22 @@ impl QuicConnection {
         &mut self, writer: Box<dyn std::io::Write + Send + Sync>, title: String,
         description: String,
     ) {
-        self.set_qlog_with_level(writer, title, description, quiche::QlogLevel::Base)
+        self.set_qlog_with_level(
+            writer,
+            title,
+            description,
+            quiche::QlogLevel::Base,
+        )
     }
+
     #[cfg(feature = "qlog")]
     #[cfg_attr(docsrs, doc(cfg(feature = "qlog")))]
     pub fn set_qlog_with_level(
         &mut self, writer: Box<dyn std::io::Write + Send + Sync>, title: String,
         description: String, qlog_level: QlogLevel,
     ) {
-        
-        let vp=qlog::VantagePointType::Client;
-        //let vp = if self.is_server {
+        let vp = qlog::VantagePointType::Client;
+        // let vp = if self.is_server {
         //    qlog::VantagePointType::Server
         //} else {
         //    qlog::VantagePointType::Client
@@ -697,16 +700,8 @@ impl QuicConnection {
 
         streamer.start_log().ok();
 
-        //let ev_data = self
-        //    .local_transport_params
-        //    .to_qlog(TransportOwner::Local, self.handshake.cipher());
-
-        // This event occurs very early, so just mark the relative time as 0.0.
-        //streamer.add_event(Event::with_time(0.0, ev_data)).ok();
-
         self.qlog.streamer = Some(streamer);
     }
-
 }
 
 impl AsSocketStats for QuicConnection {

@@ -73,6 +73,7 @@ serde_with = { workspace = true }
 slog-scope = { workspace = true }
 slog-stdlog = { workspace = true }
 smallvec = { workspace = true }
+ring = { workspace = true }
 task-killswitch = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt","rt-multi-thread"] }
