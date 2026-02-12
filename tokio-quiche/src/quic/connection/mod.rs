@@ -43,30 +43,7 @@ use datagram_socket::SocketStats;
 use foundations::telemetry::log;
 use futures::future::BoxFuture;
 use futures::Future;
-#[cfg(feature = "qlog")]
-use qlog::events::connectivity::ConnectivityEventType;
-#[cfg(feature = "qlog")]
-use qlog::events::connectivity::TransportOwner;
-#[cfg(feature = "qlog")]
-use qlog::events::quic::RecoveryEventType;
-#[cfg(feature = "qlog")]
-use qlog::events::quic::TransportEventType;
-#[cfg(feature = "qlog")]
-use qlog::events::DataRecipient;
-#[cfg(feature = "qlog")]
-use qlog::events::Event;
-#[cfg(feature = "qlog")]
-use qlog::events::EventData;
-#[cfg(feature = "qlog")]
-use qlog::events::EventImportance;
-#[cfg(feature = "qlog")]
-use qlog::events::EventType;
-#[cfg(feature = "qlog")]
-use qlog::events::RawInfo;
 use quiche::ConnectionId;
-#[cfg(feature = "qlog")]
-use quiche::QlogLevel;
-use quiche::TransportParams;
 use std::fmt;
 use std::io;
 use std::net::SocketAddr;
@@ -349,9 +326,6 @@ where
             audit_log_stats: Arc::clone(&self.audit_log_stats),
             stats: Arc::clone(&self.stats),
             scid: self.params.scid,
-            #[cfg(feature = "qlog")]
-            qlog: Default::default(),
-            is_server: false,
         };
         let context = ConnectionStageContext {
             in_pkt: self.params.initial_pkt,
@@ -531,67 +505,6 @@ pub struct QuicConnection {
     audit_log_stats: Arc<QuicAuditStats>,
     stats: QuicConnectionStatsShared,
     scid: ConnectionId<'static>,
-    #[cfg(feature = "qlog")]
-    qlog: QlogInfo,
-    /// Whether this is a server-side connection.
-    is_server: bool,
-}
-
-/// Executes the provided body if the qlog feature is enabled, quiche has been
-/// configured with a log writer, the event's importance is within the
-/// configured level.
-macro_rules! qlog_with_type {
-    ($ty:expr, $qlog:expr, $qlog_streamer_ref:ident, $body:block) => {{
-        #[cfg(feature = "qlog")]
-        {
-            if EventImportance::from($ty).is_contained_in(&$qlog.level) {
-                if let Some($qlog_streamer_ref) = &mut $qlog.streamer {
-                    $body
-                }
-            }
-        }
-    }};
-}
-#[cfg(feature = "qlog")]
-impl Default for QlogInfo {
-    fn default() -> Self {
-        QlogInfo {
-            streamer: None,
-            logged_peer_params: false,
-            level: EventImportance::Base,
-        }
-    }
-}
-
-#[cfg(feature = "qlog")]
-const QLOG_PARAMS_SET: EventType =
-    EventType::TransportEventType(TransportEventType::ParametersSet);
-
-#[cfg(feature = "qlog")]
-const QLOG_PACKET_RX: EventType =
-    EventType::TransportEventType(TransportEventType::PacketReceived);
-
-#[cfg(feature = "qlog")]
-const QLOG_PACKET_TX: EventType =
-    EventType::TransportEventType(TransportEventType::PacketSent);
-
-#[cfg(feature = "qlog")]
-const QLOG_DATA_MV: EventType =
-    EventType::TransportEventType(TransportEventType::DataMoved);
-
-#[cfg(feature = "qlog")]
-const QLOG_METRICS: EventType =
-    EventType::RecoveryEventType(RecoveryEventType::MetricsUpdated);
-
-#[cfg(feature = "qlog")]
-const QLOG_CONNECTION_CLOSED: EventType =
-    EventType::ConnectivityEventType(ConnectivityEventType::ConnectionClosed);
-
-#[cfg(feature = "qlog")]
-struct QlogInfo {
-    streamer: Option<qlog::streamer::QlogStreamer>,
-    logged_peer_params: bool,
-    level: EventImportance,
 }
 
 impl QuicConnection {
@@ -635,73 +548,8 @@ impl QuicConnection {
         &self.scid
     }
 
-    #[cfg(feature = "qlog")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "qlog")))]
-    pub fn set_qlog(
-        &mut self, writer: Box<dyn std::io::Write + Send + Sync>, title: String,
-        description: String,
-    ) {
-        self.set_qlog_with_level(
-            writer,
-            title,
-            description,
-            quiche::QlogLevel::Base,
-        )
-    }
 
-    #[cfg(feature = "qlog")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "qlog")))]
-    pub fn set_qlog_with_level(
-        &mut self, writer: Box<dyn std::io::Write + Send + Sync>, title: String,
-        description: String, qlog_level: QlogLevel,
-    ) {
-        let vp = qlog::VantagePointType::Client;
-        // let vp = if self.is_server {
-        //    qlog::VantagePointType::Server
-        //} else {
-        //    qlog::VantagePointType::Client
-        //};
 
-        let level = match qlog_level {
-            quiche::QlogLevel::Core => qlog::events::EventImportance::Core,
-
-            quiche::QlogLevel::Base => qlog::events::EventImportance::Base,
-
-            quiche::QlogLevel::Extra => qlog::events::EventImportance::Extra,
-        };
-
-        self.qlog.level = level;
-
-        let trace = qlog::TraceSeq::new(
-            qlog::VantagePoint {
-                name: None,
-                ty: vp,
-                flow: None,
-            },
-            Some(title.to_string()),
-            Some(description.to_string()),
-            Some(qlog::Configuration {
-                time_offset: Some(0.0),
-                original_uris: None,
-            }),
-            None,
-        );
-
-        let mut streamer = qlog::streamer::QlogStreamer::new(
-            qlog::QLOG_VERSION.to_string(),
-            Some(title),
-            Some(description),
-            None,
-            Instant::now(),
-            trace,
-            self.qlog.level,
-            writer,
-        );
-
-        streamer.start_log().ok();
-
-        self.qlog.streamer = Some(streamer);
-    }
 }
 
 impl AsSocketStats for QuicConnection {

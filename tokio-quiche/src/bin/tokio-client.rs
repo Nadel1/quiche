@@ -4,7 +4,6 @@ use tokio_quiche::http3::driver::H3Event;
 use tokio_quiche::http3::driver::InboundFrame;
 use tokio_quiche::http3::driver::IncomingH3Headers;
 use tokio_quiche::quiche::h3;
-use ring::rand::*;
 
 /// Makes a buffered writer for a qlog.
 pub fn make_qlog_writer(
@@ -27,32 +26,8 @@ async fn main() -> tokio_quiche::QuicResult<()> {
     let socket = tokio::net::UdpSocket::bind("0.0.0.0:49852").await?;
     socket.connect("127.0.0.1:4433").await?;
 
-    let (mut connection, mut controller) =
+    let (_, mut controller) =
         tokio_quiche::quic::connect(socket, None).await?;
-
-    // Only bother with qlog if the user specified it.
-    #[cfg(feature = "qlog")]
-    {
-        println!("QLOG");
-        if let Some(dir) = std::env::var_os("QLOGDIR") {
-            // Generate a random source connection ID for the connection.
-            let rng = SystemRandom::new();
-
-            let mut conn_id = [0; quiche::MAX_CONN_ID_LEN].to_vec();
-            rng.fill(&mut conn_id[..]).unwrap();
-
-            let scid = conn_id.to_vec();
-            let scid = quiche::ConnectionId::from_ref(&scid);
-            let id = format!("{scid:?}");
-            let writer = make_qlog_writer(&dir, "client", &id);
-
-            connection.set_qlog(
-                std::boxed::Box::new(writer),
-                "quiche-client qlog".to_string(),
-                format!("{} id={}", "quiche-client qlog", id),
-            );
-        }
-    }
 
     controller
         .request_sender()

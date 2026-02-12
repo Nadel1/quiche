@@ -80,7 +80,6 @@ pub(crate) fn send_h3_dgram(
     let mut prefix = [0u8; 8];
     let mut buf = octets::OctetsMut::with_slice(&mut prefix);
     let flow_id = buf.put_varint(flow_id)?;
-
     if dgram.add_prefix(flow_id) {
         conn.dgram_send(&dgram)
     } else {
