@@ -170,7 +170,6 @@ where
         ClientH3Driver::new(Http3Settings::default());
     let mut params = ConnectionParams::default();
     params.settings.max_idle_timeout = Some(Duration::from_secs(30));
-
     Ok((
         connect_with_config(socket, host, &params, h3_driver).await?,
         h3_controller,
@@ -217,7 +216,6 @@ where
         socket.peer_addr,
         client_config.as_mut(),
     )?;
-
     log::info!("created unestablished quiche::Connection"; "scid" => ?scid);
 
     if let Some(session) = &params.session {
@@ -226,13 +224,11 @@ where
             quiche::Error::CryptoFail
         })?;
     }
-
     // Set the qlog writer here instead of in the `ClientConnector` to avoid
     // missing logs from early in the connection
-    if let Some(qlog_dir) = &client_config.qlog_dir {
-        log::info!("setting up qlogs"; "qlog_dir"=>qlog_dir);
+    if let Some(dir) = std::env::var_os("QLOGDIR") {
         let id = format!("{:?}", &scid);
-        if let Ok(writer) = make_qlog_writer(qlog_dir, &id) {
+        if let Ok(writer) = make_qlog_writer(&dir.into_string().unwrap(), &id) {
             quiche_conn.set_qlog(
                 std::boxed::Box::new(writer),
                 "tokio-quiche qlog".to_string(),

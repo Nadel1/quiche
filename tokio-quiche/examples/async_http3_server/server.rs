@@ -141,6 +141,7 @@ where
     async fn handle_server_h3_event(
         &mut self, event: ServerH3Event,
     ) -> QuicResult<()> {
+        println!("Encountered event: {event:?}");
         match event {
             ServerH3Event::Core(event) => Self::handle_h3_event(event),
 

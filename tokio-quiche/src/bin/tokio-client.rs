@@ -26,20 +26,19 @@ async fn main() -> tokio_quiche::QuicResult<()> {
     let socket = tokio::net::UdpSocket::bind("0.0.0.0:49852").await?;
     socket.connect("127.0.0.1:4433").await?;
 
-    let (_, mut controller) =
-        tokio_quiche::quic::connect(socket, None).await?;
+    let (_, mut controller) = tokio_quiche::quic::connect(socket, None).await?;
 
-    controller
-        .request_sender()
-        .send(tokio_quiche::http3::driver::NewClientRequest {
-            request_id: 0,
-            headers: vec![
-                h3::Header::new(b":method", b"GET"),
-                h3::Header::new(b":path", "README.md".as_bytes()),
-            ],
-            body_writer: None,
-        })
-        .unwrap();
+    let request = tokio_quiche::http3::driver::NewClientRequest {
+        request_id: 0,
+        headers: vec![h3::Header::new(b":method", b"GET"),
+        h3::Header::new(b":scheme",b"http"),
+        h3::Header::new(b":authority", b"127.0.0.1:4433"),
+        h3::Header::new(b":path", b"README.md"),
+        h3::Header::new(b":user-agent", b"quiche"),],
+        body_writer: None,
+    };
+    println!("Sending out request: {:?}", request);
+    controller.request_sender().send(request).unwrap();
 
     while let Some(event) = controller.event_receiver_mut().recv().await {
         match event {

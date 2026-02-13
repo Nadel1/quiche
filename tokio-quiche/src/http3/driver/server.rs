@@ -175,12 +175,12 @@ impl ServerHooks {
         driver: &mut H3Driver<Self>, qconn: &mut QuicheConnection,
         headers: InboundHeaders,
     ) -> H3ConnectionResult<()> {
-        println!("Handling request");
         let InboundHeaders {
             stream_id,
             headers,
             has_body,
         } = headers;
+        println!("in handle request: header is {:?}",headers);
         // Multiple HEADERS frames can be received on a single stream, but only
         // the first one is an actual request. For now ignore any additional
         // HEADERS (e.g. "trailers").
@@ -229,11 +229,7 @@ impl ServerHooks {
 
         driver
             .h3_event_sender
-            .send(ServerH3Event::Headers {
-                incoming_headers: headers,
-                priority: latest_priority_update,
-                is_in_early_data: IsInEarlyData::new(qconn.is_in_early_data()),
-            })
+            .send(H3Event::IncomingHeaders(headers).into())
             .map_err(|_| H3ConnectionError::ControllerWentAway)?;
         driver.hooks.requests += 1;
 
@@ -284,6 +280,7 @@ impl DriverHooks for ServerHooks {
         driver: &mut H3Driver<Self>, qconn: &mut QuicheConnection,
         headers: InboundHeaders,
     ) -> H3ConnectionResult<()> {
+        println!("in headers_received: {:?}",headers.headers);
         if driver
             .hooks
             .settings_enforcer

@@ -442,7 +442,6 @@ impl<H: DriverHooks> H3Driver<H> {
     fn process_h3_data(
         &mut self, qconn: &mut QuicheConnection, stream_id: u64,
     ) -> H3ConnectionResult<()> {
-        println!("insert receiving qlog here!");
         // Split self borrow between conn and stream_map
         let conn = self.conn.as_mut().ok_or(Self::connection_not_present())?;
         let ctx = self
@@ -619,7 +618,6 @@ impl<H: DriverHooks> H3Driver<H> {
         &mut self, qconn: &mut QuicheConnection, stream_id: u64, event: h3::Event,
     ) -> H3ConnectionResult<()> {
         self.forward_settings()?;
-        println!("Event: {:?} on stream_id {:?} and connection: {:?}",event,stream_id,qconn.stats());
         match event {
             // Requests/responses are exclusively handled by hooks.
             h3::Event::Headers { list, more_frames } =>
@@ -1077,8 +1075,6 @@ impl<H: DriverHooks> H3Driver<H> {
     fn process_writable_stream(
         &mut self, qconn: &mut QuicheConnection, stream_id: u64,
     ) -> H3ConnectionResult<()> {
-
-        println!("insert sending qlog here");
         // Split self borrow between conn and stream_map
         let conn = self.conn.as_mut().ok_or(Self::connection_not_present())?;
         let Some(ctx) = self.stream_map.get_mut(&stream_id) else {
@@ -1140,7 +1136,6 @@ impl<H: DriverHooks> H3Driver<H> {
             match recv.try_recv() {
                 Ok(frame) => ctx.queued_frame = Some(frame),
                 Err(TryRecvError::Disconnected) => {
-                    println!("processing writable stram, disconnected---this is called----");
                     if !ctx.fin_or_reset_sent &&
                         ctx.associated_dgram_flow_id.is_none()
                     // The channel might be closed if the stream was used to
