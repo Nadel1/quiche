@@ -396,6 +396,10 @@ use std::sync::Arc;
 use std::time::Duration;
 use std::time::Instant;
 
+use std::fs::File;
+use std::time::SystemTime;
+use std::time::UNIX_EPOCH;
+
 #[cfg(feature = "qlog")]
 use qlog::events::connectivity::ConnectivityEventType;
 #[cfg(feature = "qlog")]
@@ -605,6 +609,8 @@ pub struct Config {
     track_unknown_transport_params: Option<usize>,
 
     initial_rtt: Duration,
+
+    logging_name: String,
 }
 
 // See https://quicwg.org/base-drafts/rfc9000.html#section-15
@@ -681,6 +687,7 @@ impl Config {
 
             track_unknown_transport_params: None,
             initial_rtt: DEFAULT_INITIAL_RTT,
+            logging_name: "test.csv".to_string(),
         })
     }
 
@@ -897,6 +904,11 @@ impl Config {
     /// The default value is `333`.
     pub fn set_initial_rtt(&mut self, v: Duration) {
         self.initial_rtt = v;
+    }
+
+    /// Sets the log file name
+    pub fn set_log_name(&mut self, v: String) {
+        self.logging_name = v;
     }
 
     /// Sets the `max_idle_timeout` transport parameter, in milliseconds.
@@ -1496,6 +1508,8 @@ where
 
     /// The anti-amplification limit factor.
     max_amplification_factor: usize,
+
+    logging_name: String,
 }
 
 /// Creates a new server-side connection.
@@ -2111,7 +2125,21 @@ impl<F: BufFactory> Connection<F> {
             stream_data_blocked_recv_count: 0,
 
             max_amplification_factor: config.max_amplification_factor,
+
+            logging_name: config.logging_name.clone(),
         };
+
+        if config.logging_name != "" {
+            File::create(config.logging_name.clone()).unwrap();
+
+            use std::io::Write; // has to be included here, otherwise issues with other write calls
+            let mut file = File::options()
+                .append(true)
+                .open(config.logging_name.clone())
+                .unwrap();
+            let save_string = "TIMESTAMP,SENT/RECEIVED,PACKET_NUM,PACKET_SIZE,CWND,BYTES_IN_FLIGHT,RTT,PTO\n";
+            let _ = file.write_all(save_string.as_bytes());
+        }
 
         if let Some(retry_cids) = retry_cids {
             conn.local_transport_params
@@ -2197,6 +2225,32 @@ impl<F: BufFactory> Connection<F> {
         description: String,
     ) {
         self.set_qlog_with_level(writer, title, description, QlogLevel::Base)
+    }
+
+    pub fn write_to_log(&self, sent: bool, logging_values: Vec<u128>) {
+        use std::io::Write;
+        if self.logging_name == "" {
+            return;
+        }
+        let mut file = File::options()
+            .append(true)
+            .open(self.logging_name.clone())
+            .unwrap();
+        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH);
+        let mut save_string = timestamp.unwrap().as_secs().to_string().to_owned();
+        save_string.push_str(",");
+        if sent {
+            save_string.push_str("SENT");
+        } else {
+            save_string.push_str("RECEIVED");
+        }
+        let vec_iter = logging_values.iter();
+        for val in vec_iter {
+            save_string.push_str(",");
+            save_string.push_str(&val.to_string());
+        }
+        save_string.push_str("\n");
+        let _ = file.write_all(save_string.as_bytes());
     }
 
     /// Sets qlog output to the designated [`Writer`].
