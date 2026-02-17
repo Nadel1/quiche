@@ -25,8 +25,8 @@ async fn main() -> tokio_quiche::QuicResult<()> {
     let bind_to: String = args.listen.parse().unwrap();
 
     let socket = tokio::net::UdpSocket::bind(bind_to).await?;
-    let settings = QuicSettings::default();
-
+    let mut settings = QuicSettings::default();
+    settings.logging_name = args.logging_name;
     let mut listeners = listen(
         [socket],
         ConnectionParams::new_server(

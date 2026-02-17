@@ -1,10 +1,15 @@
+use datagram_socket::ShutdownConnectionExt;
 use foundations::telemetry::log;
 use tokio_quiche::args::*;
 use tokio_quiche::http3::driver::ClientH3Event;
 use tokio_quiche::http3::driver::H3Event;
 use tokio_quiche::http3::driver::InboundFrame;
 use tokio_quiche::http3::driver::IncomingH3Headers;
+use tokio_quiche::http3::settings::Http3Settings;
 use tokio_quiche::quiche::h3;
+use tokio_quiche::settings::QuicSettings;
+use tokio_quiche::ClientH3Driver;
+use tokio_quiche::ConnectionParams;
 
 #[tokio::main]
 async fn main() -> tokio_quiche::QuicResult<()> {
@@ -27,7 +32,7 @@ async fn main() -> tokio_quiche::QuicResult<()> {
     let bind_to: String = bind_addr.parse().unwrap();
     let socket = tokio::net::UdpSocket::bind(bind_to).await?;
     let file = &mut args.urls[0].path().to_string();
-    if file.chars().next().unwrap()=='/'{
+    if file.chars().next().unwrap() == '/' {
         file.remove(0); // removes leading /
     }
     println!("Connect url: {:}", peer_addr);
@@ -35,7 +40,16 @@ async fn main() -> tokio_quiche::QuicResult<()> {
     println!("Args method: {:?}", &args.dump_response_path);
     socket.connect(peer_addr).await?;
 
-    let (_, mut controller) = tokio_quiche::quic::connect(socket, None).await?;
+    let settings = QuicSettings::default();
+    let mut params =
+        ConnectionParams::new_client(settings, None, Default::default());
+    params.settings.logging_name = args.logging_name;
+    let (h3_driver, mut controller) =
+        ClientH3Driver::new(Http3Settings::default());
+
+    let mut quic_connection: tokio_quiche::QuicConnection =
+        tokio_quiche::quic::connect_with_config(socket, None, &params, h3_driver)
+            .await?;
 
     println!("Path is: {:?}", file);
     for _i in 0..args.reqs_cardinal {
@@ -103,5 +117,6 @@ async fn main() -> tokio_quiche::QuicResult<()> {
             }
         }
     }
+    quic_connection.shutdown_connection().await?;
     Ok(())
 }

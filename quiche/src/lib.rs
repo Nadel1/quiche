@@ -3703,6 +3703,22 @@ impl<F: BufFactory> Connection<F> {
 
         self.ack_eliciting_sent = false;
 
+        let path = self.paths.get_mut(recv_pid)?;
+        // It's fine to set the skip counter based on a non-active path's values.
+        let cwnd = path.recovery.cwnd();
+        let rtt = path.recovery.rtt().as_micros();
+        let bytes_in_flight = path.recovery.bytes_in_flight();
+        let logging_values = vec![
+            pn as u128,
+            read as u128,
+            cwnd as u128,
+            bytes_in_flight as u128,
+            rtt as u128,
+            path.recovery.pto().as_micros(),
+            path.recovery.rttvar().as_micros()
+        ];
+        self.write_to_log(false, logging_values);
+
         Ok(read)
     }
 
@@ -5245,6 +5261,24 @@ impl<F: BufFactory> Connection<F> {
         if ack_eliciting {
             self.ack_eliciting_sent = true;
         }
+
+        let active_path = self.paths.get_active_mut()?;
+        let cwnd = active_path.recovery.cwnd();
+
+        let rtt = active_path.recovery.rtt().as_micros();
+        let bytes_in_flight = active_path.recovery.bytes_in_flight();
+
+        let logging_values = vec![
+            pn as u128,
+            if ack_eliciting { written } else { 0 } as u128,
+            cwnd as u128,
+            bytes_in_flight as u128,
+            rtt as u128,
+            active_path.recovery.pto().as_micros(),
+            active_path.recovery.rttvar().as_micros(),
+            active_path.recovery.pto().as_micros(),
+        ];
+        self.write_to_log(true, logging_values);
 
         Ok((pkt_type, written))
     }
