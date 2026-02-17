@@ -62,6 +62,7 @@ pub struct CommonArgs {
     pub qpack_blocked_streams: Option<u64>,
     pub initial_rtt: Duration,
     pub initial_cwnd_packets: u64,
+    pub logging_name: String,
 }
 
 /// Creates a new `CommonArgs` structure using the provided [`Docopt`].
@@ -154,6 +155,7 @@ impl Args for CommonArgs {
         let no_grease = args.get_bool("--no-grease");
 
         let cc_algorithm = args.get_str("--cc-algorithm");
+        println!("----cc algorithm in args is {:?}------",cc_algorithm);
 
         let disable_hystart = args.get_bool("--disable-hystart");
 
@@ -198,6 +200,7 @@ impl Args for CommonArgs {
         let initial_rtt_millis =
             args.get_str("--initial-rtt").parse::<u64>().unwrap();
 
+        println!("{:?}", initial_rtt_millis);
         let initial_rtt = Duration::from_millis(initial_rtt_millis);
 
         let initial_cwnd_packets = args
@@ -205,6 +208,9 @@ impl Args for CommonArgs {
             .parse::<u64>()
             .unwrap();
 
+        
+        let logging_name = args.get_str("--logging-file");
+        println!("----logging name in args is {:?}-----",logging_name);
         CommonArgs {
             alpns,
             max_data,
@@ -229,6 +235,7 @@ impl Args for CommonArgs {
             qpack_blocked_streams,
             initial_rtt,
             initial_cwnd_packets,
+            logging_name: logging_name.to_string(),
         }
     }
 }
@@ -259,6 +266,7 @@ impl Default for CommonArgs {
             qpack_blocked_streams: None,
             initial_rtt: Duration::from_millis(333),
             initial_cwnd_packets: 10,
+            logging_name: "default.csv".to_string(),
         }
     }
 }
@@ -329,6 +337,7 @@ pub struct ClientArgs {
     pub source_port: u16,
     pub perform_migration: bool,
     pub send_priority_update: bool,
+    pub logging_name: String,
 }
 
 impl Args for ClientArgs {
@@ -406,6 +415,9 @@ impl Args for ClientArgs {
 
         let send_priority_update = args.get_bool("--send-priority-update");
 
+        let logging_name = args.get_str("--logging-file").to_string();
+        println!("Logging name is {:?}",logging_name);
+
         ClientArgs {
             version,
             dump_response_path,
@@ -421,7 +433,8 @@ impl Args for ClientArgs {
             session_file,
             source_port,
             perform_migration,
-            send_priority_update
+            send_priority_update,
+            logging_name,
         }
     }
 }
@@ -443,7 +456,8 @@ impl Default for ClientArgs {
             session_file: None,
             source_port: 0,
             perform_migration: false,
-            send_priority_update: false
+            send_priority_update: false,
+            logging_name: "client.csv".to_string(),
         }
     }
 }
@@ -501,7 +515,8 @@ pub struct ServerArgs {
     pub key: String,
     pub disable_gso: bool,
     pub disable_pacing: bool,
-    pub enable_pmtud: bool
+    pub enable_pmtud: bool,
+    pub logging_name: String,
 }
 
 impl Args for ServerArgs {
@@ -517,6 +532,9 @@ impl Args for ServerArgs {
         let disable_gso = args.get_bool("--disable-gso");
         let disable_pacing = args.get_bool("--disable-pacing");
         let enable_pmtud = args.get_bool("--enable-pmtud");
+
+        let logging_name = args.get_str("--logging-file").to_string();
+
         ServerArgs {
             listen,
             no_retry,
@@ -526,7 +544,8 @@ impl Args for ServerArgs {
             key,
             disable_gso,
             disable_pacing,
-            enable_pmtud
+            enable_pmtud,
+            logging_name
         }
     }
 }
