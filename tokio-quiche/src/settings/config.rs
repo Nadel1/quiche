@@ -53,6 +53,7 @@ pub(crate) struct Config {
     pub handshake_timeout: Option<Duration>,
     pub has_ippktinfo: bool,
     pub has_ipv6pktinfo: bool,
+    pub logging_name: String,
 }
 
 impl AsMut<quiche::Config> for Config {
@@ -104,6 +105,7 @@ impl Config {
             handshake_timeout: quic_settings.handshake_timeout,
             has_ippktinfo,
             has_ipv6pktinfo,
+            logging_name: quic_settings.logging_name.clone(),
         })
     }
 }
@@ -149,6 +151,7 @@ fn make_quiche_config(
 
     config.set_max_recv_udp_payload_size(quic_settings.max_recv_udp_payload_size);
     config.set_max_send_udp_payload_size(quic_settings.max_send_udp_payload_size);
+    config.set_log_name(params.settings.logging_name.clone());
     config.set_initial_max_data(quic_settings.initial_max_data);
     config.set_initial_max_stream_data_bidi_local(
         quic_settings.initial_max_stream_data_bidi_local,

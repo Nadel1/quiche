@@ -323,6 +323,13 @@ pub struct QuicSettings {
     ///
     /// [`enable_track_unknown_transport_parameters()`]: https://docs.rs/quiche/latest/quiche/struct.Config.html#method.enable_track_unknown_transport_parameters
     pub track_unknown_transport_parameters: Option<usize>,
+
+    /// Make initial rtt configurable
+    #[serde(default = "QuicSettings::default_initial_rtt")]
+    pub initial_rtt: Option<Duration>,
+
+    #[serde(default = "QuicSettings::default_logging_name")]
+    pub logging_name: String,
 }
 
 impl QuicSettings {
@@ -451,6 +458,16 @@ impl QuicSettings {
     #[inline]
     fn default_pmtud_max_probes() -> u8 {
         3
+    }
+
+    #[inline]
+    fn default_initial_rtt() -> Option<Duration> {
+        Some(Duration::from_secs(30))
+    }
+
+    #[inline]
+    fn default_logging_name() -> String {
+        "default_log.csv".to_string()
     }
 }
 

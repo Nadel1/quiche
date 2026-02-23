@@ -396,6 +396,10 @@ use std::sync::Arc;
 use std::time::Duration;
 use std::time::Instant;
 
+use std::fs::File;
+use std::time::SystemTime;
+use std::time::UNIX_EPOCH;
+
 #[cfg(feature = "qlog")]
 use qlog::events::connectivity::ConnectivityEventType;
 #[cfg(feature = "qlog")]
@@ -605,6 +609,7 @@ pub struct Config {
     track_unknown_transport_params: Option<usize>,
 
     initial_rtt: Duration,
+    logging_name: String,
 }
 
 // See https://quicwg.org/base-drafts/rfc9000.html#section-15
@@ -681,6 +686,7 @@ impl Config {
 
             track_unknown_transport_params: None,
             initial_rtt: DEFAULT_INITIAL_RTT,
+            logging_name: "test.csv".to_string(),
         })
     }
 
@@ -905,6 +911,11 @@ impl Config {
     pub fn set_max_idle_timeout(&mut self, v: u64) {
         self.local_transport_params.max_idle_timeout =
             cmp::min(v, octets::MAX_VAR_INT);
+    }
+
+    /// Sets the log file name
+    pub fn set_log_name(&mut self, v: String) {
+        self.logging_name = v;
     }
 
     /// Sets the `max_udp_payload_size transport` parameter.
@@ -1496,6 +1507,8 @@ where
 
     /// The anti-amplification limit factor.
     max_amplification_factor: usize,
+
+    logging_name: String,
 }
 
 /// Creates a new server-side connection.
@@ -2035,7 +2048,19 @@ impl<F: BufFactory> Connection<F> {
             stream_data_blocked_recv_count: 0,
 
             max_amplification_factor: config.max_amplification_factor,
+            logging_name: config.logging_name.clone(),
         };
+        if config.logging_name != "" {
+            File::create(config.logging_name.clone()).unwrap();
+
+            use std::io::Write; // has to be included here, otherwise issues with other write calls
+            let mut file = File::options()
+                .append(true)
+                .open(config.logging_name.clone())
+                .unwrap();
+            let save_string = "TIMESTAMP,SENT/RECEIVED,PACKET_NUM,PACKET_SIZE,CWND,BYTES_IN_FLIGHT,RTT,PTO\n";
+            let _ = file.write_all(save_string.as_bytes());
+        }
 
         if let Some(retry_cids) = retry_cids {
             conn.local_transport_params
@@ -2236,6 +2261,32 @@ impl<F: BufFactory> Connection<F> {
             cmp::min(v, octets::MAX_VAR_INT);
 
         self.encode_transport_params()
+    }
+
+    pub fn write_to_log(&self, sent: bool, logging_values: Vec<u128>) {
+        use std::io::Write;
+        if self.logging_name == "" {
+            return;
+        }
+        let mut file = File::options()
+            .append(true)
+            .open(self.logging_name.clone())
+            .unwrap();
+        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH);
+        let mut save_string = timestamp.unwrap().as_secs().to_string().to_owned();
+        save_string.push_str(",");
+        if sent {
+            save_string.push_str("SENT");
+        } else {
+            save_string.push_str("RECEIVED");
+        }
+        let vec_iter = logging_values.iter();
+        for val in vec_iter {
+            save_string.push_str(",");
+            save_string.push_str(&val.to_string());
+        }
+        save_string.push_str("\n");
+        let _ = file.write_all(save_string.as_bytes());
     }
 
     /// Sets the congestion control algorithm used.
@@ -3565,6 +3616,22 @@ impl<F: BufFactory> Connection<F> {
         }
 
         self.ack_eliciting_sent = false;
+
+        let path = self.paths.get_mut(recv_pid)?;
+        // It's fine to set the skip counter based on a non-active path's values.
+        let cwnd = path.recovery.cwnd();
+        let rtt = path.recovery.rtt().as_micros();
+        let bytes_in_flight = path.recovery.bytes_in_flight();
+        let logging_values = vec![
+            pn as u128,
+            read as u128,
+            cwnd as u128,
+            bytes_in_flight as u128,
+            rtt as u128,
+            path.recovery.pto().as_micros(),
+            path.recovery.rttvar().as_micros(),
+        ];
+        self.write_to_log(false, logging_values);
 
         Ok(read)
     }
@@ -5108,6 +5175,23 @@ impl<F: BufFactory> Connection<F> {
         if ack_eliciting {
             self.ack_eliciting_sent = true;
         }
+        let active_path = self.paths.get_active_mut()?;
+        let cwnd = active_path.recovery.cwnd();
+
+        let rtt = active_path.recovery.rtt().as_micros();
+        let bytes_in_flight = active_path.recovery.bytes_in_flight();
+
+        let logging_values = vec![
+            pn as u128,
+            if ack_eliciting { written } else { 0 } as u128,
+            cwnd as u128,
+            bytes_in_flight as u128,
+            rtt as u128,
+            active_path.recovery.pto().as_micros(),
+            active_path.recovery.rttvar().as_micros(),
+            active_path.recovery.pto().as_micros(),
+        ];
+        self.write_to_log(true, logging_values);
 
         Ok((pkt_type, written))
     }
