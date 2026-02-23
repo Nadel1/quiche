@@ -155,7 +155,7 @@ impl Args for CommonArgs {
         let no_grease = args.get_bool("--no-grease");
 
         let cc_algorithm = args.get_str("--cc-algorithm");
-        println!("----cc algorithm in args is {:?}------",cc_algorithm);
+        println!("----cc algorithm in args is {:?}------", cc_algorithm);
 
         let disable_hystart = args.get_bool("--disable-hystart");
 
@@ -208,9 +208,8 @@ impl Args for CommonArgs {
             .parse::<u64>()
             .unwrap();
 
-        
         let logging_name = args.get_str("--logging-file");
-        println!("----logging name in args is {:?}-----",logging_name);
+        println!("----logging name in args is {:?}-----", logging_name);
         CommonArgs {
             alpns,
             max_data,
@@ -338,6 +337,8 @@ pub struct ClientArgs {
     pub perform_migration: bool,
     pub send_priority_update: bool,
     pub logging_name: String,
+    pub idle_timeout: u64,
+    pub initial_rtt: u64,
 }
 
 impl Args for ClientArgs {
@@ -416,7 +417,13 @@ impl Args for ClientArgs {
         let send_priority_update = args.get_bool("--send-priority-update");
 
         let logging_name = args.get_str("--logging-file").to_string();
-        println!("Logging name is {:?}",logging_name);
+        println!("Logging name is {:?}", logging_name);
+
+        let idle_timeout = args.get_str("--idle-timeout");
+        let idle_timeout = idle_timeout.parse::<u64>().unwrap();
+
+        let initial_rtt = args.get_str("--initial-rtt");
+        let initial_rtt = initial_rtt.parse::<u64>().unwrap();
 
         ClientArgs {
             version,
@@ -435,6 +442,8 @@ impl Args for ClientArgs {
             perform_migration,
             send_priority_update,
             logging_name,
+            idle_timeout,
+            initial_rtt,
         }
     }
 }
@@ -458,6 +467,8 @@ impl Default for ClientArgs {
             perform_migration: false,
             send_priority_update: false,
             logging_name: "client.csv".to_string(),
+            idle_timeout: 30000,
+            initial_rtt: 333,
         }
     }
 }
@@ -517,6 +528,8 @@ pub struct ServerArgs {
     pub disable_pacing: bool,
     pub enable_pmtud: bool,
     pub logging_name: String,
+    pub idle_timeout: u64,
+    pub initial_rtt: u64,
 }
 
 impl Args for ServerArgs {
@@ -535,6 +548,12 @@ impl Args for ServerArgs {
 
         let logging_name = args.get_str("--logging-file").to_string();
 
+        let idle_timeout = args.get_str("--idle-timeout");
+        let idle_timeout = idle_timeout.parse::<u64>().unwrap();
+
+        let initial_rtt = args.get_str("--initial-rtt");
+        let initial_rtt = initial_rtt.parse::<u64>().unwrap();
+
         ServerArgs {
             listen,
             no_retry,
@@ -545,7 +564,9 @@ impl Args for ServerArgs {
             disable_gso,
             disable_pacing,
             enable_pmtud,
-            logging_name
+            logging_name,
+            idle_timeout,
+            initial_rtt,
         }
     }
 }

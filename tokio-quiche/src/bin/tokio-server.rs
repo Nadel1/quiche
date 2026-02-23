@@ -3,6 +3,7 @@ use futures::StreamExt as _;
 use quiche::h3::NameValue;
 use quiche::h3::Priority;
 use std::str::from_utf8;
+use std::time::Duration;
 use tokio_quiche::args::*;
 use tokio_quiche::buf_factory::BufFactory;
 use tokio_quiche::http3::driver::H3Event;
@@ -27,6 +28,9 @@ async fn main() -> tokio_quiche::QuicResult<()> {
     let socket = tokio::net::UdpSocket::bind(bind_to).await?;
     let mut settings = QuicSettings::default();
     settings.logging_name = args.logging_name;
+    settings.initial_rtt = Some(Duration::from_millis(args.initial_rtt));
+    settings.max_idle_timeout = Some(Duration::from_millis(args.idle_timeout));
+    println!("Set max idle timeout: {:?}", settings.max_idle_timeout);
     let mut listeners = listen(
         [socket],
         ConnectionParams::new_server(

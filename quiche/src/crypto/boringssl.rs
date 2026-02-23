@@ -111,7 +111,8 @@ impl PacketKey {
 
         if rc != 1 {
             println!("crypotfail!!");
-            return Err(Error::CryptoFail);
+            panic!();
+            //return Err(Error::CryptoFail);
         }
 
         Ok(out_len)
