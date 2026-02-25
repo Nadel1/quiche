@@ -24,7 +24,12 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::fs::File;
+use std::io::Write;
+use std::path::Path;
 use std::time::Instant;
+use std::time::SystemTime;
+use std::time::UNIX_EPOCH;
 
 use self::recovery::Acked;
 use super::bandwidth::Bandwidth;
@@ -35,6 +40,9 @@ use crate::recovery::rtt::RttStats;
 use crate::recovery::CongestionControlAlgorithm;
 use crate::StartupExit;
 use crate::StartupExitReason;
+
+const SAVED_CC_FILE: &str = "saved_params.csv";
+pub const PACING_MULTIPLIER: f64 = 1.25;
 
 pub struct SsThresh {
     // Current slow start threshold.  Defaults to usize::MAX which
@@ -116,6 +124,8 @@ pub struct Congestion {
     max_datagram_size: usize,
 
     pub(crate) lost_count: usize,
+    // Careful resume
+    pub(crate) resume: own_resume::OwnResume,
 }
 
 impl Congestion {
@@ -123,7 +133,7 @@ impl Congestion {
         let initial_congestion_window = recovery_config.max_send_udp_payload_size *
             recovery_config.initial_congestion_window_packets;
 
-        let mut cc = Congestion {
+        let mut cc: Congestion = Congestion {
             congestion_window: initial_congestion_window,
 
             ssthresh: Default::default(),
@@ -154,6 +164,8 @@ impl Congestion {
             hystart: hystart::Hystart::new(recovery_config.hystart),
 
             prr: prr::PRR::default(),
+
+            resume: own_resume::OwnResume::new(SAVED_CC_FILE),
         };
 
         (cc.cc_ops.on_init)(&mut cc);
@@ -185,6 +197,47 @@ impl Congestion {
 
     fn update_app_limited(&mut self, v: bool) {
         self.app_limited = v;
+    }
+
+    fn calculate_saved_params(&mut self, rtt_stats: &RttStats) {
+        // rtt as low as possible, cwnd as high as  possible
+
+        if Path::new(SAVED_CC_FILE).exists() {
+            let mut saved_cwnd = self.resume.get_saved_cwnd();
+            let mut saved_rtt = self.resume.get_saved_rtt();
+
+            if saved_rtt > rtt_stats.rtt().as_secs() {
+                println!(
+                    "new saved rtt! was: {:?}, will be {:?}",
+                    saved_rtt,
+                    rtt_stats.rtt().as_secs()
+                );
+                saved_rtt = rtt_stats.min_rtt.as_secs();
+                self.resume.set_saved_rtt(saved_rtt);
+            }
+
+            if saved_cwnd < self.congestion_window() as f64 {
+                saved_cwnd = self.congestion_window() as f64;
+            }
+            if saved_cwnd > (4 * self.initial_congestion_window_packets) as f64 {
+                self.write_params_to_file(saved_rtt, saved_cwnd as usize);
+            }
+        } else {
+            File::create(SAVED_CC_FILE).unwrap();
+        }
+    }
+
+    fn write_params_to_file(&mut self, saved_rtt: u64, saved_cwnd: usize) {
+        let mut file = File::create(SAVED_CC_FILE).unwrap();
+        let mut save_string = "SAVED_RTT,".to_owned();
+        save_string.push_str(&saved_rtt.to_string());
+        save_string.push_str(",SAVED_CWND,");
+        save_string.push_str(&saved_cwnd.to_string());
+        save_string.push_str(",timestamp,");
+        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH);
+        save_string.push_str(&timestamp.unwrap().as_secs().to_string());
+
+        let _ = file.write_all(save_string.as_bytes());
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -236,6 +289,12 @@ impl Congestion {
             now,
             rtt_stats,
         );
+        match self.resume.get_state() {
+            own_resume::CrState::Normal => {
+                self.calculate_saved_params(rtt_stats);
+            },
+            _ => {},
+        }
     }
 }
 
@@ -348,6 +407,7 @@ mod tests {
 mod cubic;
 mod delivery_rate;
 mod hystart;
+pub(crate) mod own_resume;
 mod prr;
 pub(crate) mod recovery;
 mod reno;

@@ -36,6 +36,8 @@ use super::Sent;
 
 use crate::packet::Epoch;
 use crate::ranges::RangeSet;
+use crate::recovery::congestion::own_resume;
+use crate::recovery::congestion::SsThresh;
 use crate::recovery::Bandwidth;
 use crate::recovery::HandshakeStatus;
 use crate::recovery::OnLossDetectionTimeoutOutcome;
@@ -582,6 +584,31 @@ impl RecoveryOps for LegacyRecovery {
         &mut self, mut pkt: Sent, epoch: Epoch,
         handshake_status: HandshakeStatus, now: Instant, trace_id: &str,
     ) {
+        // COPIED FROM https://github.com/ana-cc/quiche/blob/resume_latest/quiche/src/recovery/mod.rs (12.08.2025)
+        let bytes_acked = self.congestion.resume.total_acked;
+        let iw_acked =
+            bytes_acked >= self.congestion.initial_congestion_window_packets;
+
+        if self.congestion.resume.enabled()
+        //&& epoch == packet::Epoch::Application
+        {
+            let largest_sent_pkt = self.epochs[epoch]
+                .sent_packets
+                .iter()
+                .map(|p| p.pkt_num)
+                .max()
+                .unwrap_or_default();
+            // Increase the congestion window by a jump determined by careful
+            // resume
+            self.congestion.congestion_window =
+                self.congestion.resume.send_packet(
+                    Some(self.rtt_stats.smoothed_rtt),
+                    self.congestion.congestion_window,
+                    largest_sent_pkt,
+                    self.congestion.app_limited,
+                    iw_acked,
+                );
+        }
         let ack_eliciting = pkt.ack_eliciting;
         let in_flight = pkt.in_flight;
         let sent_bytes = pkt.size;
@@ -696,6 +723,36 @@ impl RecoveryOps for LegacyRecovery {
         let (lost_packets, lost_bytes) =
             self.detect_lost_packets(epoch, now, trace_id);
 
+        // COPIED FROM https://github.com/ana-cc/quiche/blob/resume_latest/quiche/src/recovery/mod.rs (12.08.2025)
+        let bytes_acked = self.congestion.resume.total_acked;
+        let iw_acked =
+            bytes_acked >= self.congestion.initial_congestion_window_packets;
+        if self.congestion.resume.enabled() {
+            for packet in self.newly_acked.iter() {
+                let largest_sent_pkt = self.epochs[epoch]
+                    .sent_packets
+                    .iter()
+                    .map(|p| p.pkt_num)
+                    .max()
+                    .unwrap_or_default();
+                let (new_cwnd, new_ssthresh) =
+                    self.congestion.resume.process_ack(
+                        largest_sent_pkt,
+                        packet,
+                        self.bytes_in_flight.get(),
+                        iw_acked,
+                    );
+                if let Some(new_cwnd) = new_cwnd {
+                    self.congestion.congestion_window = new_cwnd;
+                }
+                if let Some(new_ssthresh) = new_ssthresh {
+                    let mut new_thresh = SsThresh::default();
+                    new_thresh.update(new_ssthresh, false); // css: would be relevant for hystart, not used outside of it,
+                                                            // assume it to be false
+                    self.congestion.ssthresh = new_thresh;
+                }
+            }
+        }
         self.congestion.on_packets_acked(
             self.bytes_in_flight.get(),
             &mut self.newly_acked,
@@ -824,6 +881,25 @@ impl RecoveryOps for LegacyRecovery {
     fn on_path_change(
         &mut self, epoch: Epoch, now: Instant, trace_id: &str,
     ) -> (usize, usize) {
+        if self.congestion.resume.enabled() {
+            let cr_state = self.congestion.resume.get_state();
+            match cr_state {
+                own_resume::CrState::Reconnaissance => {
+                    println!("Path changed, aborting CR!");
+                    self.congestion
+                        .resume
+                        .change_state(own_resume::CrState::Normal);
+                },
+                own_resume::CrState::Unvalidated(_) => {
+                    println!("Path changed, aborting CR!");
+                    self.congestion
+                        .resume
+                        .change_state(own_resume::CrState::Normal);
+                },
+                _ => {},
+            }
+        }
+
         // Time threshold loss detection.
         self.detect_lost_packets(epoch, now, trace_id)
     }
@@ -866,7 +942,6 @@ impl RecoveryOps for LegacyRecovery {
     fn pto(&self) -> Duration {
         self.rtt() + cmp::max(self.rtt_stats.rttvar * 4, GRANULARITY)
     }
-
 
     /// The most recent data delivery rate estimate.
     fn delivery_rate(&self) -> Bandwidth {

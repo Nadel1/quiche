@@ -45,6 +45,8 @@ use super::Congestion;
 use super::CongestionControlOps;
 use crate::recovery::MINIMUM_WINDOW_PACKETS;
 
+use crate::recovery::congestion::own_resume::CrState;
+
 pub(crate) static CUBIC: CongestionControlOps = CongestionControlOps {
     on_init,
     on_packet_sent,
@@ -239,6 +241,18 @@ fn on_packet_acked(
                     r.hystart.css_cwnd_inc(r.max_datagram_size);
             } else {
                 r.congestion_window += r.max_datagram_size;
+                if r.resume.enabled() {
+                    let cr_state = r.resume.get_state();
+                    match cr_state {
+                        CrState::Unvalidated(_) => {},
+                        CrState::SafeRetreat(_) => {},
+                        _ => {
+                            r.congestion_window += r.max_datagram_size;
+                        },
+                    }
+                } else {
+                    r.congestion_window += r.max_datagram_size;
+                }
             }
 
             r.bytes_acked_sl -= r.max_datagram_size;
@@ -352,7 +366,12 @@ fn congestion_event(
         let ssthresh =
             cmp::max(ssthresh, r.max_datagram_size * MINIMUM_WINDOW_PACKETS);
         r.ssthresh.update(ssthresh, r.hystart.in_css());
-        r.congestion_window = ssthresh;
+        if !r.resume.enabled() {
+            r.congestion_window = ssthresh;
+        } else {
+            r.congestion_window =
+                r.resume.congestion_event(largest_lost_pkt.pkt_num);
+        }
 
         r.cubic_state.k = if r.cubic_state.w_max < r.congestion_window as f64 {
             0.0
@@ -401,6 +420,10 @@ fn rollback(r: &mut Congestion) -> bool {
     r.congestion_recovery_start_time = r.cubic_state.prior.epoch_start;
 
     true
+}
+
+fn has_custom_pacing() -> bool {
+    false
 }
 
 #[cfg(feature = "qlog")]
