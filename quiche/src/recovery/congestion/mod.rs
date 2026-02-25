@@ -31,10 +31,11 @@ use std::time::Instant;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 
-use self::recovery::Acked;
+use crate::recovery::Acked;
 use super::bandwidth::Bandwidth;
 use super::RecoveryConfig;
 use super::Sent;
+use crate::recovery::own_resume;
 use crate::recovery::rtt;
 use crate::recovery::rtt::RttStats;
 use crate::recovery::CongestionControlAlgorithm;
@@ -407,9 +408,8 @@ mod tests {
 mod cubic;
 mod delivery_rate;
 mod hystart;
-pub(crate) mod own_resume;
 mod prr;
-pub(crate) mod recovery;
+pub mod recovery;
 mod reno;
 
 #[cfg(test)]

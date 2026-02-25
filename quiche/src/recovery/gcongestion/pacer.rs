@@ -38,6 +38,7 @@ use crate::recovery::RecoveryStats;
 use crate::recovery::ReleaseDecision;
 use crate::recovery::ReleaseTime;
 
+
 use super::Acked;
 use super::Lost;
 
@@ -122,6 +123,13 @@ impl Pacer {
         self.sender.get_congestion_window()
     }
 
+    pub fn set_congestion_window(&mut self,cwnd:usize){
+        self.sender.set_congestion_window(cwnd);
+    }
+
+    pub fn get_initial_cwnd(&self)->usize{
+        self.sender.get_initial_cwnd()
+    }
     pub fn on_packet_sent(
         &mut self, sent_time: Instant, bytes_in_flight: usize,
         packet_number: u64, bytes: usize, is_retransmissible: bool,
@@ -155,6 +163,47 @@ impl Pacer {
             self.pacing_limited = false;
             return;
         }
+
+        //// Pacing: Set the pacing rate if CC doesn't do its own.
+        //// COPIED from https://github.com/ana-cc/quiche/blob/resume_latest/quiche/src/recovery/congestion/mod.rs (14.08.2025)
+        //match self.resume.get_state() {
+        //    own_resume::CrState::Normal => {
+        //        if !(self.cc_ops.has_custom_pacing)() &&
+        //            rtt_stats.has_first_rtt_sample
+        //        {
+        //            let rate = PACING_MULTIPLIER * self.congestion_window as f64 /
+        //                rtt_stats.smoothed_rtt.as_secs_f64();
+        //            self.set_pacing_rate(rate as u64, now);
+        //        }
+        //    },
+        //    own_resume::CrState::Unvalidated(_) => {
+        //        let now = Instant::now();
+//
+        //        if now - self.resume.get_state_timer() > rtt_stats.latest_rtt() ||
+        //            bytes_in_flight / self.max_datagram_size >=
+        //                self.congestion_window
+        //        {
+        //            self.congestion_window = self.resume.check_flight_size(
+        //                bytes_in_flight,
+        //                self.congestion_window(),
+        //                pkt.pkt_num,
+        //            );
+        //        }
+//
+        //        if !(self.cc_ops.has_custom_pacing)() &&
+        //            rtt_stats.has_first_rtt_sample
+        //        {
+        //            // see page 19 of https://datatracker.ietf.org/doc/draft-ietf-tsvwg-careful-resume/
+        //            let inter_transmission_time: f64 =
+        //                (rtt_stats.smoothed_rtt.as_secs_f64() *
+        //                    self.max_datagram_size as f64) /
+        //                    self.resume.get_jump_cwnd() as f64;
+//
+        //            self.set_pacing_rate(inter_transmission_time as u64, now);
+        //        }
+        //    },
+        //    _ => {},
+        //}
 
         // The next packet should be sent as soon as the current packet has been
         // transferred. PacingRate is based on bytes in flight including this
@@ -273,6 +322,10 @@ impl Pacer {
         self.sender.on_app_limited(bytes_in_flight);
     }
 
+    pub fn get_app_limited(&self)->bool{
+        self.sender.is_app_limited()
+    }
+
     pub fn update_mss(&mut self, new_mss: usize) {
         self.sender.update_mss(new_mss)
     }
@@ -281,6 +334,7 @@ impl Pacer {
     pub fn ssthresh(&self) -> Option<u64> {
         self.sender.ssthresh()
     }
+
 
     #[cfg(test)]
     pub fn is_app_limited(&self, bytes_in_flight: usize) -> bool {

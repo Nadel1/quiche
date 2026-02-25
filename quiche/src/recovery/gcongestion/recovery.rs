@@ -6,8 +6,13 @@ use crate::Error;
 use crate::Result;
 
 use std::collections::VecDeque;
+use std::fs::File;
+use std::io::Write;
+use std::path::Path;
 use std::time::Duration;
 use std::time::Instant;
+use std::time::SystemTime;
+use std::time::UNIX_EPOCH;
 
 use smallvec::SmallVec;
 
@@ -21,7 +26,9 @@ use crate::frame;
 
 use crate::recovery::bytes_in_flight::BytesInFlight;
 use crate::recovery::gcongestion::Bandwidth;
+use crate::recovery::own_resume;
 use crate::recovery::rtt::RttStats;
+use crate::recovery::Acked;
 use crate::recovery::CongestionControlAlgorithm;
 use crate::recovery::HandshakeStatus;
 use crate::recovery::LossDetectionTimer;
@@ -43,12 +50,11 @@ use crate::recovery::PACKET_REORDER_TIME_THRESHOLD;
 
 use super::bbr2::BBRv2;
 use super::pacer::Pacer;
-use super::Acked;
 use super::Lost;
 
 // Congestion Control
 const MAX_WINDOW_PACKETS: usize = 20_000;
-
+const SAVED_CC_FILE: &str = "saved_params.csv";
 #[derive(Debug)]
 struct SentPacket {
     pkt_num: u64,
@@ -169,7 +175,6 @@ impl RecoveryEpoch {
         skip_pn: Option<u64>, trace_id: &str,
     ) -> Result<AckedDetectionResult> {
         newly_acked.clear();
-
         let mut acked_bytes = 0;
         let mut spurious_losses = 0;
         let mut spurious_pkt_thresh = None;
@@ -226,6 +231,12 @@ impl RecoveryEpoch {
                             newly_acked.push(Acked {
                                 pkt_num: *pkt_num,
                                 time_sent,
+                                rtt: Duration::from_secs(0), // dummy, not needed
+                                size: 0,
+                                delivered: 0,
+                                delivered_time: Instant::now(),
+                                first_sent_time: time_sent,
+                                is_app_limited: false,
                             });
 
                             self.acked_frames.extend(frames);
@@ -466,6 +477,7 @@ pub struct GRecovery {
     lost_reuse: Vec<Lost>,
 
     pacer: Pacer,
+    pub(crate) resume: own_resume::OwnResume,
 }
 
 impl GRecovery {
@@ -530,7 +542,48 @@ impl GRecovery {
 
             newly_acked: Vec::new(),
             lost_reuse: Vec::new(),
+            resume: own_resume::OwnResume::new(SAVED_CC_FILE),
         })
+    }
+
+    fn calculate_saved_params(&mut self, rtt: u64, min_rtt: u64) {
+        // rtt as low as possible, cwnd as high as  possible
+
+        if Path::new(SAVED_CC_FILE).exists() {
+            let mut saved_cwnd = self.resume.get_saved_cwnd();
+            let mut saved_rtt = self.resume.get_saved_rtt();
+
+            if saved_rtt > rtt {
+                println!(
+                    "new saved rtt! was: {:?}, will be {:?}",
+                    saved_rtt, rtt
+                );
+                saved_rtt = min_rtt;
+                self.resume.set_saved_rtt(saved_rtt);
+            }
+
+            if saved_cwnd < self.pacer.get_congestion_window() as f64 {
+                saved_cwnd = self.pacer.get_congestion_window() as f64;
+            }
+            if saved_cwnd > (4 * self.pacer.get_initial_cwnd()) as f64 {
+                self.write_params_to_file(saved_rtt, saved_cwnd as usize);
+            }
+        } else {
+            File::create(SAVED_CC_FILE).unwrap();
+        }
+    }
+
+    fn write_params_to_file(&mut self, saved_rtt: u64, saved_cwnd: usize) {
+        let mut file = File::create(SAVED_CC_FILE).unwrap();
+        let mut save_string = "SAVED_RTT,".to_owned();
+        save_string.push_str(&saved_rtt.to_string());
+        save_string.push_str(",SAVED_CWND,");
+        save_string.push_str(&saved_cwnd.to_string());
+        save_string.push_str(",timestamp,");
+        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH);
+        save_string.push_str(&timestamp.unwrap().as_secs().to_string());
+
+        let _ = file.write_all(save_string.as_bytes());
     }
 
     fn detect_and_remove_lost_packets(
@@ -649,6 +702,10 @@ impl GRecovery {
             self.loss_timer.update(timeout);
         }
     }
+
+    fn is_app_limited(&self) -> bool {
+        self.pacer.get_app_limited()
+    }
 }
 
 impl RecoveryOps for GRecovery {
@@ -700,6 +757,49 @@ impl RecoveryOps for GRecovery {
         &mut self, pkt: Sent, epoch: packet::Epoch,
         handshake_status: HandshakeStatus, now: Instant, trace_id: &str,
     ) {
+        // COPIED FROM https://github.com/ana-cc/quiche/blob/resume_latest/quiche/src/recovery/mod.rs (12.08.2025)
+        let bytes_acked = self.resume.total_acked;
+        let iw_acked = bytes_acked >= self.pacer.get_initial_cwnd();
+
+        if self.resume.enabled()
+        //&& epoch == packet::Epoch::Application
+        {
+                        // Increase the congestion window by a jump determined by careful
+            // resume
+            self.pacer.set_congestion_window(self.resume.send_packet(
+                Some(self.rtt_stats.latest_rtt),
+                self.pacer.get_congestion_window(),
+                pkt.pkt_num,
+                self.is_app_limited(),
+                iw_acked,
+            ));
+            // Pacing: Set the pacing rate if CC doesn't do its own.
+            // COPIED from https://github.com/ana-cc/quiche/blob/resume_latest/quiche/src/recovery/congestion/mod.rs (14.08.2025)
+            match self.resume.get_state() {
+                own_resume::CrState::Normal => {}, // do not do special pacing
+                // (not possible)
+                own_resume::CrState::Unvalidated(_) => {
+                    let now = Instant::now();
+
+                    if now - self.resume.get_state_timer() >
+                        self.rtt_stats.latest_rtt() ||
+                        self.bytes_in_flight.get() / self.max_datagram_size >=
+                            self.cwnd()
+                    {
+                        self.pacer.set_congestion_window(
+                            self.resume.check_flight_size(
+                                self.bytes_in_flight.get(),
+                                self.cwnd(),
+                                pkt.pkt_num,
+                            ),
+                        );
+                    }
+                },
+                _ => {},
+            }
+
+        }
+
         let time_sent = if self.time_sent_set_to_now {
             now
         } else {
@@ -774,6 +874,30 @@ impl RecoveryOps for GRecovery {
         epoch: packet::Epoch, handshake_status: HandshakeStatus, now: Instant,
         skip_pn: Option<u64>, trace_id: &str,
     ) -> Result<OnAckReceivedOutcome> {
+        // COPIED FROM https://github.com/ana-cc/quiche/blob/resume_latest/quiche/src/recovery/mod.rs (12.08.2025)
+        let bytes_acked = self.resume.total_acked;
+        let iw_acked = bytes_acked >= self.cwnd();
+        if self.resume.enabled() {
+            for packet in self.newly_acked.iter() {
+                let largest_sent_pkt = self.epochs[epoch]
+                    .sent_packets
+                    .iter()
+                    .map(|p| p.pkt_num)
+                    .max()
+                    .unwrap_or_default();
+                let (new_cwnd, new_ssthresh) = self.resume.process_ack(
+                    largest_sent_pkt,
+                    packet,
+                    self.bytes_in_flight.get(),
+                    iw_acked,
+                );
+                if let Some(new_cwnd) = new_cwnd {
+                    self.pacer.set_congestion_window(new_cwnd);
+                }
+                // we ignore the ssthresh
+            }
+        }
+
         let prior_in_flight = self.bytes_in_flight.get();
 
         let AckedDetectionResult {
@@ -847,7 +971,15 @@ impl RecoveryOps for GRecovery {
         self.set_loss_detection_timer(handshake_status, now);
 
         trace!("{trace_id} {self:?}");
-
+        match self.resume.get_state() {
+            own_resume::CrState::Normal => {
+                self.calculate_saved_params(
+                    self.rtt_stats.rtt().as_secs(),
+                    self.rtt_stats.min_rtt.as_secs(),
+                );
+            },
+            _ => {},
+        }
         Ok(OnAckReceivedOutcome {
             lost_packets,
             lost_bytes,
@@ -970,6 +1102,20 @@ impl RecoveryOps for GRecovery {
     fn on_path_change(
         &mut self, epoch: packet::Epoch, now: Instant, _trace_id: &str,
     ) -> (usize, usize) {
+        if self.resume.enabled() {
+            let cr_state = self.resume.get_state();
+            match cr_state {
+                own_resume::CrState::Reconnaissance => {
+                    println!("Path changed, aborting CR!");
+                    self.resume.change_state(own_resume::CrState::Normal);
+                },
+                own_resume::CrState::Unvalidated(_) => {
+                    println!("Path changed, aborting CR!");
+                    self.resume.change_state(own_resume::CrState::Normal);
+                },
+                _ => {},
+            }
+        }
         let (lost_bytes, lost_packets) =
             self.detect_and_remove_lost_packets(epoch, now);
 

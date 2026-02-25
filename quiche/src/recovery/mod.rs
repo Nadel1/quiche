@@ -92,6 +92,25 @@ const LOSS_REDUCTION_FACTOR: f64 = 0.5;
 // an ACK.
 pub(super) const MAX_OUTSTANDING_NON_ACK_ELICITING: usize = 24;
 
+#[derive(Clone)]
+pub struct Acked {
+    pub pkt_num: u64,
+
+    pub time_sent: Instant,
+
+    pub size: usize,
+
+    pub rtt: Duration,
+
+    pub delivered: usize,
+
+    pub delivered_time: Instant,
+
+    pub first_sent_time: Instant,
+
+    pub is_app_limited: bool,
+}
+
 #[derive(Default)]
 struct LossDetectionTimer {
     time: Option<Instant>,
@@ -2671,4 +2690,5 @@ mod bandwidth;
 mod bytes_in_flight;
 mod congestion;
 mod gcongestion;
+mod own_resume;
 mod rtt;

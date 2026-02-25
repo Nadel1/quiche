@@ -31,13 +31,13 @@ mod recovery;
 
 use std::fmt::Debug;
 use std::str::FromStr;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 pub use self::recovery::GRecovery;
 use crate::recovery::bandwidth::Bandwidth;
 
 use crate::recovery::rtt::RttStats;
-use crate::recovery::RecoveryStats;
+use crate::recovery::{Acked, RecoveryStats};
 
 #[derive(Debug)]
 pub struct Lost {
@@ -45,11 +45,6 @@ pub struct Lost {
     pub(super) bytes_lost: usize,
 }
 
-#[derive(Debug)]
-pub struct Acked {
-    pub(super) pkt_num: u64,
-    pub(super) time_sent: Instant,
-}
 
 pub(super) trait CongestionControl: Debug {
     /// Returns the name of the current state of the congestion control state
@@ -61,6 +56,8 @@ pub(super) trait CongestionControl: Debug {
     /// is not the *available* window. Some send algorithms may not use a
     /// congestion window and will return 0.
     fn get_congestion_window(&self) -> usize;
+
+    fn set_congestion_window(&mut self,cwnd:usize);
 
     /// Returns the size of the current congestion window in packets. Note, this
     /// is not the *available* window. Some send algorithms may not use a
@@ -83,6 +80,8 @@ pub(super) trait CongestionControl: Debug {
     /// Inform that `packet_number` has been neutered.
     fn on_packet_neutered(&mut self, _packet_number: u64) {}
 
+
+    fn is_app_limited(&self)->bool;
     /// Indicates an update to the congestion state, caused either by an
     /// incoming ack or loss event timeout. `rtt_updated` indicates whether a
     /// new `latest_rtt` sample has been taken, `prior_in_flight` the bytes in

@@ -1,6 +1,6 @@
 // Based on: https://github.com/ana-cc/quiche/blob/resume_latest/quiche/src/recovery/congestion/resume.rs (11.08.2025)
 
-use crate::recovery::congestion::Acked;
+use crate::recovery::Acked;
 use std::time::Duration;
 use std::time::Instant;
 use std::time::SystemTime;

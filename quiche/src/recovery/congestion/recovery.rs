@@ -38,6 +38,7 @@ use crate::packet::Epoch;
 use crate::ranges::RangeSet;
 use crate::recovery::congestion::own_resume;
 use crate::recovery::congestion::SsThresh;
+use crate::recovery::Acked;
 use crate::recovery::Bandwidth;
 use crate::recovery::HandshakeStatus;
 use crate::recovery::OnLossDetectionTimeoutOutcome;
@@ -586,8 +587,9 @@ impl RecoveryOps for LegacyRecovery {
     ) {
         // COPIED FROM https://github.com/ana-cc/quiche/blob/resume_latest/quiche/src/recovery/mod.rs (12.08.2025)
         let bytes_acked = self.congestion.resume.total_acked;
-        let iw_acked =
-            bytes_acked >= self.congestion.initial_congestion_window_packets;
+        let iw_acked = bytes_acked >=
+            self.congestion.initial_congestion_window_packets /
+                self.congestion.max_datagram_size;
 
         if self.congestion.resume.enabled()
         //&& epoch == packet::Epoch::Application
@@ -608,6 +610,29 @@ impl RecoveryOps for LegacyRecovery {
                     self.congestion.app_limited,
                     iw_acked,
                 );
+            // Pacing: Set the pacing rate if CC doesn't do its own.
+            // COPIED from https://github.com/ana-cc/quiche/blob/resume_latest/quiche/src/recovery/congestion/mod.rs (14.08.2025)
+            match self.congestion.resume.get_state() {
+                own_resume::CrState::Normal => {}, // do not do special pacing
+                // (not possible)
+                own_resume::CrState::Unvalidated(_) => {
+                    let now = Instant::now();
+
+                    if now - self.congestion.resume.get_state_timer() >
+                        self.rtt_stats.latest_rtt() ||
+                        self.bytes_in_flight.get() / self.max_datagram_size >=
+                            self.congestion.congestion_window
+                    {
+                        self.congestion.congestion_window =
+                            self.congestion.resume.check_flight_size(
+                                self.bytes_in_flight.get(),
+                                self.congestion.congestion_window,
+                                pkt.pkt_num,
+                            );
+                    }
+                },
+                _ => {},
+            }
         }
         let ack_eliciting = pkt.ack_eliciting;
         let in_flight = pkt.in_flight;
@@ -1147,23 +1172,4 @@ impl std::fmt::Debug for LegacyRecovery {
 
         Ok(())
     }
-}
-
-#[derive(Clone)]
-pub struct Acked {
-    pub pkt_num: u64,
-
-    pub time_sent: Instant,
-
-    pub size: usize,
-
-    pub rtt: Duration,
-
-    pub delivered: usize,
-
-    pub delivered_time: Instant,
-
-    pub first_sent_time: Instant,
-
-    pub is_app_limited: bool,
 }

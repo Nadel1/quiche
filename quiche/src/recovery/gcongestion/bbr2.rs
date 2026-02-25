@@ -37,6 +37,8 @@ mod startup;
 
 use std::time::Duration;
 use std::time::Instant;
+use std::time::SystemTime;
+use std::time::UNIX_EPOCH;
 
 use network_model::BBRv2NetworkModel;
 
@@ -524,6 +526,7 @@ impl BBRv2 {
             last_quiescence_start: None,
             mss: max_segment_size,
             params,
+
         }
     }
 
@@ -541,6 +544,10 @@ impl BBRv2 {
         }
     }
 
+    pub fn get_initial_cwnd(&self) -> usize {
+        self.initial_cwnd
+    }
+
     fn get_target_congestion_window(&self, gain: f32) -> usize {
         let network_model = self.mode.network_model();
         network_model
@@ -556,7 +563,8 @@ impl BBRv2 {
         };
 
         if network_model.total_bytes_acked() == bytes_acked {
-            // After the first ACK, cwnd is still the initial congestion window.
+            // After the first ACK, cwnd is still the initial congestion
+            // window.
             self.pacing_rate = Bandwidth::from_bytes_and_time_delta(
                 self.cwnd,
                 network_model.min_rtt(),
@@ -595,7 +603,6 @@ impl BBRv2 {
             self.pacing_rate = target_rate;
             return;
         }
-
         // By default, the pacing rate never decreases in STARTUP.
         self.pacing_rate = self.pacing_rate.max(target_rate);
     }
@@ -649,6 +656,10 @@ impl CongestionControl for BBRv2 {
 
     fn get_congestion_window(&self) -> usize {
         self.cwnd
+    }
+
+    fn set_congestion_window(&mut self, cwnd: usize) {
+        self.cwnd = cwnd;
     }
 
     fn get_congestion_window_in_packets(&self) -> usize {
@@ -740,6 +751,9 @@ impl CongestionControl for BBRv2 {
         network_model.on_packet_neutered(packet_number);
     }
 
+    fn is_app_limited(&self)->bool{
+        self.last_sample_is_app_limited
+    }
     fn on_retransmission_timeout(&mut self, _packets_retransmitted: bool) {}
 
     fn on_connection_migration(&mut self) {}
@@ -792,6 +806,7 @@ impl CongestionControl for BBRv2 {
         let network_model = self.mode.network_model_mut();
         network_model.on_app_limited()
     }
+
 
     fn limit_cwnd(&mut self, max_cwnd: usize) {
         self.cwnd_limits.hi = max_cwnd
