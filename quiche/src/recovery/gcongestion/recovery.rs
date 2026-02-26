@@ -861,29 +861,28 @@ impl RecoveryOps for GRecovery {
                                 .bandwidth_estimate(&self.rtt_stats)
                                 .to_bits_per_second(),
                     });
-                    if state_str == "bbr_startup" {
-                        if in_flight {
-                            self.pacer.on_packet_sent(
-                                time_sent,
-                                self.bytes_in_flight.get(),
-                                pkt_num,
-                                sent_bytes,
-                                pkt.has_data,
-                                &self.rtt_stats,
-                            );
 
-                            self.bytes_in_flight.add(sent_bytes, now);
-                            epoch.pkts_in_flight += 1;
-                            self.set_loss_detection_timer(
-                                handshake_status,
-                                time_sent,
-                            );
-                        }
+                    if in_flight {
+                        self.pacer.on_packet_sent(
+                            time_sent,
+                            self.bytes_in_flight.get(),
+                            pkt_num,
+                            sent_bytes,
+                            pkt.has_data,
+                            &self.rtt_stats,
+                        );
 
-                        self.bytes_sent += sent_bytes;
-
-                        trace!("{trace_id} {self:?}");
+                        self.bytes_in_flight.add(sent_bytes, now);
+                        epoch.pkts_in_flight += 1;
+                        self.set_loss_detection_timer(
+                            handshake_status,
+                            time_sent,
+                        );
                     }
+
+                    self.bytes_sent += sent_bytes;
+
+                    trace!("{trace_id} {self:?}");
                 },
                 _ => {
                     if in_flight {
@@ -942,8 +941,11 @@ impl RecoveryOps for GRecovery {
         skip_pn: Option<u64>, trace_id: &str,
     ) -> Result<OnAckReceivedOutcome> {
         // COPIED FROM https://github.com/ana-cc/quiche/blob/resume_latest/quiche/src/recovery/mod.rs (12.08.2025)
+
         let bytes_acked = self.resume.total_acked;
-        let iw_acked = bytes_acked >= self.cwnd();
+        let iw_acked =
+            bytes_acked >= self.pacer.get_initial_cwnd();
+        println!("in ack received, bytes acked: {:?}, iw: {:?}",bytes_acked,self.pacer.get_initial_cwnd());
         if self.resume.enabled() {
             for packet in self.newly_acked.iter() {
                 let largest_sent_pkt = self.epochs[epoch]

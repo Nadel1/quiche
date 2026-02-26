@@ -550,7 +550,7 @@ impl BBRv2 {
     }
 
     pub fn get_initial_cwnd(&self) -> usize {
-        self.initial_cwnd
+        self.initial_cwnd/self.mss
     }
 
     fn get_target_congestion_window(&self, gain: f32) -> usize {
