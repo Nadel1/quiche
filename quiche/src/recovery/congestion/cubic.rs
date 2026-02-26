@@ -153,7 +153,6 @@ fn on_init(_r: &mut Congestion) {}
 fn on_packet_sent(
     r: &mut Congestion, sent_bytes: usize, bytes_in_flight: usize, now: Instant,
 ) {
-    println!("---in cubic----");
     // See https://github.com/torvalds/linux/commit/30927520dbae297182990bb21d08762bcc35ce1d
     // First transmit when no packets in flight
     let cubic = &mut r.cubic_state;

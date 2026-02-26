@@ -96,6 +96,7 @@ impl OwnResume {
                     println!("Saved parameters found, but outdated, abort CR!");
                     enabled = false;
                 }
+                println!("cr is enabled!");
             } else {
                 enabled = false;
             }
@@ -121,6 +122,7 @@ impl OwnResume {
         if self.enabled {
             self.cr_state != CrState::Normal
         } else {
+            println!("the enabled function is the issue");
             if self.cr_state != CrState::Normal {
                 self.change_state(CrState::Normal);
             }
@@ -133,6 +135,7 @@ impl OwnResume {
         &mut self, flight_size: usize, initial_window: usize, first_packet: u64,
     ) -> usize {
         if flight_size < initial_window || flight_size <= self.pipesize {
+            println!("changing to normal in check_flight_size");
             self.change_state(CrState::Normal);
             return self.pipesize;
         } else {
@@ -208,7 +211,7 @@ impl OwnResume {
                 self.pipesize += packet.size;
                 if packet.pkt_num >= first_packet {
                     if flightsize <= self.pipesize {
-                        trace!("careful resume complete");
+                        println!("careful resume complete");
                         self.change_state(CrState::Normal);
                         (Some(self.pipesize), None)
                     } else {
@@ -225,7 +228,7 @@ impl OwnResume {
             CrState::Validating(last_packet) => {
                 self.pipesize += packet.size;
                 if packet.pkt_num >= last_packet {
-                    trace!("careful resume complete");
+                    println!("careful resume complete");
                     self.change_state(
                         CrState::Normal,
                         // CarefulResumeTrigger::LastUnvalidatedPacketAcknowledged,
@@ -235,7 +238,7 @@ impl OwnResume {
             },
             CrState::SafeRetreat(last_packet) => {
                 if packet.pkt_num >= last_packet {
-                    trace!(" careful resume complete");
+                    println!(" careful resume complete");
                     self.change_state(
                         CrState::Normal,
                         // CarefulResumeTrigger::ExitRecovery,
@@ -285,6 +288,7 @@ impl OwnResume {
                 //);
                 //    self.change_state(CrState::Normal);
                 //}
+                println!("changing state too early in send packet");
                 self.change_state(CrState::Unvalidated(largest_pkt_sent));
                 self.in_state_timer = Instant::now();
                 self.pipesize = cwnd;

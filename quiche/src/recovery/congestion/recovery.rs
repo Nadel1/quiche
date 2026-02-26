@@ -585,10 +585,15 @@ impl RecoveryOps for LegacyRecovery {
         &mut self, mut pkt: Sent, epoch: Epoch,
         handshake_status: HandshakeStatus, now: Instant, trace_id: &str,
     ) {
+        println!(
+            "on_packet_sent, resume enabled? {:?} with state {:?}",
+            self.congestion.resume.enabled(),
+            self.congestion.resume.get_state()
+        );
         // COPIED FROM https://github.com/ana-cc/quiche/blob/resume_latest/quiche/src/recovery/mod.rs (12.08.2025)
         let bytes_acked = self.congestion.resume.total_acked;
         let iw_acked = bytes_acked >=
-            self.congestion.initial_congestion_window_packets /
+            self.congestion.initial_congestion_window_packets *
                 self.congestion.max_datagram_size;
 
         if self.congestion.resume.enabled()
@@ -602,6 +607,7 @@ impl RecoveryOps for LegacyRecovery {
                 .unwrap_or_default();
             // Increase the congestion window by a jump determined by careful
             // resume
+            println!("on_packet_sent, state: {:?}, bytes_acked: {:?} initial_congestion {:?}, iw {:?}",self.congestion.resume.get_state(),bytes_acked,self.congestion.initial_congestion_window_packets,iw_acked);
             self.congestion.congestion_window =
                 self.congestion.resume.send_packet(
                     Some(self.rtt_stats.smoothed_rtt),
@@ -623,6 +629,10 @@ impl RecoveryOps for LegacyRecovery {
                         self.bytes_in_flight.get() / self.max_datagram_size >=
                             self.congestion.congestion_window
                     {
+                        println!(
+                            "checking flight size, state is: {:?}",
+                            self.congestion.resume.get_state()
+                        );
                         self.congestion.congestion_window =
                             self.congestion.resume.check_flight_size(
                                 self.bytes_in_flight.get(),
@@ -752,6 +762,13 @@ impl RecoveryOps for LegacyRecovery {
         let bytes_acked = self.congestion.resume.total_acked;
         let iw_acked =
             bytes_acked >= self.congestion.initial_congestion_window_packets;
+        println!(
+            "in ack received, bytes acked: {:?}, iw: {:?}, cr enabled? {:?}",
+            bytes_acked,
+            self.congestion.initial_congestion_window_packets,
+            self.congestion.resume.enabled()
+        );
+
         if self.congestion.resume.enabled() {
             for packet in self.newly_acked.iter() {
                 let largest_sent_pkt = self.epochs[epoch]
