@@ -16,6 +16,7 @@ use tokio_quiche::ConnectionParams;
 #[tokio::main]
 async fn main() -> tokio_quiche::QuicResult<()> {
     let docopt = docopt::Docopt::new(CLIENT_USAGE).unwrap();
+    let conn_args = CommonArgs::with_docopt(&docopt);
     let args: ClientArgs = ClientArgs::with_docopt(&docopt);
     // We'll only connect to the first server provided in URL list.
     let connect_url = &args.urls[0];
@@ -45,11 +46,15 @@ async fn main() -> tokio_quiche::QuicResult<()> {
     let settings = QuicSettings::default();
     let mut params =
         ConnectionParams::new_client(settings, None, Default::default());
-    params.settings.logging_name = args.logging_name;
+    params.settings.logging_name = conn_args.logging_name;
     params.settings.initial_rtt = Some(Duration::from_millis(args.initial_rtt));
+    params.settings.cc_algorithm = conn_args.cc_algorithm;
     params.settings.max_idle_timeout =
         Some(Duration::from_millis(args.idle_timeout));
-    println!("Set max idle timeout: {:?}", params.settings.max_idle_timeout);
+    println!(
+        "Set max idle timeout: {:?}",
+        params.settings.max_idle_timeout
+    );
     let (h3_driver, mut controller) =
         ClientH3Driver::new(Http3Settings::default());
 

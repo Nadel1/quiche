@@ -21,6 +21,7 @@ use tokio_quiche::ServerH3Driver;
 #[tokio::main]
 async fn main() -> tokio_quiche::QuicResult<()> {
     let docopt: docopt::Docopt = docopt::Docopt::new(SERVER_USAGE).unwrap();
+    let conn_args = CommonArgs::with_docopt(&docopt);
     let args = ServerArgs::with_docopt(&docopt);
 
     let bind_to: String = args.listen.parse().unwrap();
@@ -30,6 +31,7 @@ async fn main() -> tokio_quiche::QuicResult<()> {
     settings.logging_name = args.logging_name;
     settings.initial_rtt = Some(Duration::from_millis(args.initial_rtt));
     settings.max_idle_timeout = Some(Duration::from_millis(args.idle_timeout));
+    settings.cc_algorithm = conn_args.cc_algorithm;
     println!("Set max idle timeout: {:?}", settings.max_idle_timeout);
     let mut listeners = listen(
         [socket],
