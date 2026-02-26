@@ -33,7 +33,7 @@ const NUM_NANOS_PER_SECOND: u64 = 1000 * NUM_MICROS_PER_SECOND;
 
 #[derive(PartialEq, PartialOrd, Eq, Ord, Clone, Copy)]
 pub struct Bandwidth {
-    bits_per_second: u64,
+    pub bits_per_second: u64,
 }
 
 impl std::ops::Mul<f64> for Bandwidth {

@@ -114,7 +114,7 @@ impl Pacer {
         }
     }
 
-    #[cfg(feature = "qlog")]
+
     pub fn state_str(&self) -> &'static str {
         self.sender.state_str()
     }
@@ -299,6 +299,9 @@ impl Pacer {
         }
     }
 
+    pub fn set_pacing_rate(&mut self, pacing_rate:Bandwidth){
+        self.sender.set_pacing_rate(pacing_rate);
+    }
     pub fn bandwidth_estimate(&self, rtt_stats: &RttStats) -> Bandwidth {
         self.sender.bandwidth_estimate(rtt_stats)
     }

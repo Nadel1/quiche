@@ -153,6 +153,7 @@ fn on_init(_r: &mut Congestion) {}
 fn on_packet_sent(
     r: &mut Congestion, sent_bytes: usize, bytes_in_flight: usize, now: Instant,
 ) {
+    println!("---in cubic----");
     // See https://github.com/torvalds/linux/commit/30927520dbae297182990bb21d08762bcc35ce1d
     // First transmit when no packets in flight
     let cubic = &mut r.cubic_state;
@@ -240,7 +241,6 @@ fn on_packet_acked(
                 r.congestion_window +=
                     r.hystart.css_cwnd_inc(r.max_datagram_size);
             } else {
-                r.congestion_window += r.max_datagram_size;
                 if r.resume.enabled() {
                     let cr_state = r.resume.get_state();
                     match cr_state {

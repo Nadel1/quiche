@@ -1,4 +1,5 @@
 use crate::packet;
+use crate::recovery::own_resume::CrState;
 use crate::recovery::OnLossDetectionTimeoutOutcome;
 use crate::recovery::INITIAL_TIME_THRESHOLD_OVERHEAD;
 use crate::recovery::TIME_THRESHOLD_OVERHEAD_MULTIPLIER;
@@ -757,14 +758,16 @@ impl RecoveryOps for GRecovery {
         &mut self, pkt: Sent, epoch: packet::Epoch,
         handshake_status: HandshakeStatus, now: Instant, trace_id: &str,
     ) {
+        println!("-----using bbrv2!----");
         // COPIED FROM https://github.com/ana-cc/quiche/blob/resume_latest/quiche/src/recovery/mod.rs (12.08.2025)
         let bytes_acked = self.resume.total_acked;
         let iw_acked = bytes_acked >= self.pacer.get_initial_cwnd();
+        let state_str = self.state_str(now);
 
         if self.resume.enabled()
         //&& epoch == packet::Epoch::Application
         {
-                        // Increase the congestion window by a jump determined by careful
+            // Increase the congestion window by a jump determined by careful
             // resume
             self.pacer.set_congestion_window(self.resume.send_packet(
                 Some(self.rtt_stats.latest_rtt),
@@ -773,12 +776,12 @@ impl RecoveryOps for GRecovery {
                 self.is_app_limited(),
                 iw_acked,
             ));
-            // Pacing: Set the pacing rate if CC doesn't do its own.
-            // COPIED from https://github.com/ana-cc/quiche/blob/resume_latest/quiche/src/recovery/congestion/mod.rs (14.08.2025)
+            // Pacing: Set the pacing rate if CC doesn't do its own. --> it does,
+            // so unneeded COPIED from https://github.com/ana-cc/quiche/blob/resume_latest/quiche/src/recovery/congestion/mod.rs (14.08.2025)
             match self.resume.get_state() {
-                own_resume::CrState::Normal => {}, // do not do special pacing
+                CrState::Normal => {}, // do not do special pacing
                 // (not possible)
-                own_resume::CrState::Unvalidated(_) => {
+                CrState::Unvalidated(_) => {
                     let now = Instant::now();
 
                     if now - self.resume.get_state_timer() >
@@ -786,6 +789,11 @@ impl RecoveryOps for GRecovery {
                         self.bytes_in_flight.get() / self.max_datagram_size >=
                             self.cwnd()
                     {
+                        // pacing based on rtt?
+                        self.pacer.pacing_rate(
+                            self.bytes_in_flight.get(),
+                            &self.rtt_stats,
+                        );
                         self.pacer.set_congestion_window(
                             self.resume.check_flight_size(
                                 self.bytes_in_flight.get(),
@@ -797,7 +805,6 @@ impl RecoveryOps for GRecovery {
                 },
                 _ => {},
             }
-
         }
 
         let time_sent = if self.time_sent_set_to_now {
@@ -844,24 +851,84 @@ impl RecoveryOps for GRecovery {
             self.outstanding_non_ack_eliciting += 1;
         }
 
-        if in_flight {
-            self.pacer.on_packet_sent(
-                time_sent,
-                self.bytes_in_flight.get(),
-                pkt_num,
-                sent_bytes,
-                pkt.has_data,
-                &self.rtt_stats,
-            );
+        // only allow sending unvalidated packets when in startup
+        if self.resume.enabled() {
+            match self.resume.get_state() {
+                CrState::Unvalidated(_) => {
+                    self.pacer.set_pacing_rate(Bandwidth {
+                        bits_per_second: 0.5 as u64 *
+                            self.pacer
+                                .bandwidth_estimate(&self.rtt_stats)
+                                .to_bits_per_second(),
+                    });
+                    if state_str == "bbr_startup" {
+                        if in_flight {
+                            self.pacer.on_packet_sent(
+                                time_sent,
+                                self.bytes_in_flight.get(),
+                                pkt_num,
+                                sent_bytes,
+                                pkt.has_data,
+                                &self.rtt_stats,
+                            );
 
-            self.bytes_in_flight.add(sent_bytes, now);
-            epoch.pkts_in_flight += 1;
-            self.set_loss_detection_timer(handshake_status, time_sent);
+                            self.bytes_in_flight.add(sent_bytes, now);
+                            epoch.pkts_in_flight += 1;
+                            self.set_loss_detection_timer(
+                                handshake_status,
+                                time_sent,
+                            );
+                        }
+
+                        self.bytes_sent += sent_bytes;
+
+                        trace!("{trace_id} {self:?}");
+                    }
+                },
+                _ => {
+                    if in_flight {
+                        self.pacer.on_packet_sent(
+                            time_sent,
+                            self.bytes_in_flight.get(),
+                            pkt_num,
+                            sent_bytes,
+                            pkt.has_data,
+                            &self.rtt_stats,
+                        );
+
+                        self.bytes_in_flight.add(sent_bytes, now);
+                        epoch.pkts_in_flight += 1;
+                        self.set_loss_detection_timer(
+                            handshake_status,
+                            time_sent,
+                        );
+                    }
+
+                    self.bytes_sent += sent_bytes;
+
+                    trace!("{trace_id} {self:?}");
+                },
+            }
+        } else {
+            if in_flight {
+                self.pacer.on_packet_sent(
+                    time_sent,
+                    self.bytes_in_flight.get(),
+                    pkt_num,
+                    sent_bytes,
+                    pkt.has_data,
+                    &self.rtt_stats,
+                );
+
+                self.bytes_in_flight.add(sent_bytes, now);
+                epoch.pkts_in_flight += 1;
+                self.set_loss_detection_timer(handshake_status, time_sent);
+            }
+
+            self.bytes_sent += sent_bytes;
+
+            trace!("{trace_id} {self:?}");
         }
-
-        self.bytes_sent += sent_bytes;
-
-        trace!("{trace_id} {self:?}");
     }
 
     fn get_packet_send_time(&self, now: Instant) -> Instant {
@@ -972,7 +1039,7 @@ impl RecoveryOps for GRecovery {
 
         trace!("{trace_id} {self:?}");
         match self.resume.get_state() {
-            own_resume::CrState::Normal => {
+            CrState::Normal => {
                 self.calculate_saved_params(
                     self.rtt_stats.rtt().as_secs(),
                     self.rtt_stats.min_rtt.as_secs(),
@@ -999,18 +1066,42 @@ impl RecoveryOps for GRecovery {
 
             let (lost_bytes, lost_packets) =
                 self.detect_and_remove_lost_packets(epoch, now);
+            if self.resume.enabled() {
+                let cr_state = self.resume.get_state();
+                match cr_state {
+                    CrState::Unvalidated(_) => {},
+                    CrState::SafeRetreat(_) => {},
+                    _ => {
+                        self.pacer.on_congestion_event(
+                            false,
+                            prior_in_flight,
+                            self.bytes_in_flight.get(),
+                            now,
+                            &[],
+                            &self.lost_reuse,
+                            self.epochs[epoch].least_unacked(),
+                            &self.rtt_stats,
+                            &mut self.recovery_stats,
+                        );
+                    },
+                }
+            } else {
+                // this method also updates the cwnd
+                self.pacer.on_congestion_event(
+                    false,
+                    prior_in_flight,
+                    self.bytes_in_flight.get(),
+                    now,
+                    &[],
+                    &self.lost_reuse,
+                    self.epochs[epoch].least_unacked(),
+                    &self.rtt_stats,
+                    &mut self.recovery_stats,
+                );
+            }
 
-            self.pacer.on_congestion_event(
-                false,
-                prior_in_flight,
-                self.bytes_in_flight.get(),
-                now,
-                &[],
-                &self.lost_reuse,
-                self.epochs[epoch].least_unacked(),
-                &self.rtt_stats,
-                &mut self.recovery_stats,
-            );
+            self.resume
+                .congestion_event(self.lost_reuse.get(0).unwrap().packet_number);
 
             self.lost_count += lost_packets;
 
@@ -1105,13 +1196,13 @@ impl RecoveryOps for GRecovery {
         if self.resume.enabled() {
             let cr_state = self.resume.get_state();
             match cr_state {
-                own_resume::CrState::Reconnaissance => {
+                CrState::Reconnaissance => {
                     println!("Path changed, aborting CR!");
-                    self.resume.change_state(own_resume::CrState::Normal);
+                    self.resume.change_state(CrState::Normal);
                 },
-                own_resume::CrState::Unvalidated(_) => {
+                CrState::Unvalidated(_) => {
                     println!("Path changed, aborting CR!");
-                    self.resume.change_state(own_resume::CrState::Normal);
+                    self.resume.change_state(CrState::SafeRetreat(0));
                 },
                 _ => {},
             }
@@ -1280,7 +1371,6 @@ impl RecoveryOps for GRecovery {
         true
     }
 
-    #[cfg(feature = "qlog")]
     fn state_str(&self, _now: Instant) -> &'static str {
         self.pacer.state_str()
     }

@@ -209,6 +209,8 @@ struct Params {
     /// 1/8th of an RTT into the future, so the error introduced by
     /// setting `time_sent` to `now` is bounded.
     time_sent_set_to_now: bool,
+
+    carefully_resuming:bool,
 }
 
 impl Params {
@@ -349,6 +351,8 @@ const DEFAULT_PARAMS: Params = Params {
     disable_probe_down_early_exit: false,
 
     time_sent_set_to_now: true,
+
+    carefully_resuming:false,
 };
 
 #[derive(Debug, PartialEq)]
@@ -504,6 +508,7 @@ impl BBRv2 {
         max_segment_size: usize, smoothed_rtt: Duration,
         custom_bbr_params: Option<&BbrParams>,
     ) -> Self {
+        println!("-----using bbrv2!----");
         let cwnd = initial_congestion_window * max_segment_size;
 
         let params = if let Some(custom_bbr_settings) = custom_bbr_params {
@@ -553,6 +558,10 @@ impl BBRv2 {
         network_model
             .bdp(network_model.bandwidth_estimate(), gain)
             .max(self.cwnd_limits.min())
+    }
+
+    pub fn set_pacing_rate(&mut self, pacing_rate:Bandwidth){
+        self.pacing_rate=pacing_rate;
     }
 
     fn update_pacing_rate(&mut self, bytes_acked: usize) {

@@ -919,7 +919,7 @@ impl RecoveryOps for LegacyRecovery {
                     println!("Path changed, aborting CR!");
                     self.congestion
                         .resume
-                        .change_state(own_resume::CrState::Normal);
+                        .change_state(own_resume::CrState::SafeRetreat(0));
                 },
                 _ => {},
             }

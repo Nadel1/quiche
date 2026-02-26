@@ -179,6 +179,7 @@ impl OwnResume {
         &mut self, largest_pkt_sent: u64, packet: &Acked, flightsize: usize,
         iw_acked: bool,
     ) -> (Option<usize>, Option<usize>) {
+        println!("In process_ack in own resume");
         self.total_acked += 1; // this was used by the other implementation: packet.size; but doesnt make
                                // too much sense here: after all the iw is saved in packets not bytes
         match self.cr_state {
@@ -194,9 +195,8 @@ impl OwnResume {
                     // flow completion?
                     if self.jump_cwnd == 0 {
                         self.change_state(CrState::Normal);
-                        return (None,None);
+                        return (None, None);
                     }
-    
 
                     (Some(self.jump_cwnd), None)
                 } else {
@@ -253,6 +253,7 @@ impl OwnResume {
         &mut self, rtt_sample: Option<Duration>, cwnd: usize,
         largest_pkt_sent: u64, app_limited: bool, iw_acked: bool,
     ) -> usize {
+        println!("In send_packet in own resume");
         self.cwnd = cwnd;
         self.rtt = rtt_sample;
         // Do nothing when data limited to avoid having insufficient data
@@ -274,14 +275,14 @@ impl OwnResume {
                     },
                 };
                 // Confirm RTT is similar to that of the saved connection
-                if current_rtt <= self.saved_rtt / 2 {
-                    println!(
-                    "current RTT too divergent from saved RTT - not using careful resume; \
-                    rtt_sample={:?} saved_rtt={:?}",
-                    current_rtt, self.saved_rtt
-                );
-                    self.change_state(CrState::Normal);
-                }
+                //if current_rtt <= self.saved_rtt / 2 {
+                //    println!(
+                //    "current RTT too divergent from saved RTT - not using careful resume; \
+                //    rtt_sample={:?} saved_rtt={:?}",
+                //    current_rtt, self.saved_rtt
+                //);
+                //    self.change_state(CrState::Normal);
+                //}
                 self.change_state(CrState::Unvalidated(largest_pkt_sent));
                 self.in_state_timer = Instant::now();
                 self.pipesize = cwnd;
@@ -301,6 +302,7 @@ impl OwnResume {
     }
 
     pub fn congestion_event(&mut self, largest_pkt_sent: u64) -> usize {
+        println!("In congestion_event in careful resume");
         match self.cr_state {
             CrState::Unvalidated(_) => {
                 println!("congestion during unvalidated phase");
