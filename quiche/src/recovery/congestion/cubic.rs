@@ -45,7 +45,7 @@ use super::Congestion;
 use super::CongestionControlOps;
 use crate::recovery::MINIMUM_WINDOW_PACKETS;
 
-use crate::recovery::congestion::own_resume::CrState;
+use crate::recovery::congestion::resume::CrState;
 
 pub(crate) static CUBIC: CongestionControlOps = CongestionControlOps {
     on_init,

@@ -1,5 +1,5 @@
 use crate::packet;
-use crate::recovery::own_resume::CrState;
+use crate::recovery::resume::CrState;
 use crate::recovery::OnLossDetectionTimeoutOutcome;
 use crate::recovery::INITIAL_TIME_THRESHOLD_OVERHEAD;
 use crate::recovery::TIME_THRESHOLD_OVERHEAD_MULTIPLIER;
@@ -27,7 +27,7 @@ use crate::frame;
 
 use crate::recovery::bytes_in_flight::BytesInFlight;
 use crate::recovery::gcongestion::Bandwidth;
-use crate::recovery::own_resume;
+use crate::recovery::resume;
 use crate::recovery::rtt::RttStats;
 use crate::recovery::Acked;
 use crate::recovery::CongestionControlAlgorithm;
@@ -233,7 +233,7 @@ impl RecoveryEpoch {
                                 pkt_num: *pkt_num,
                                 time_sent,
                                 rtt: Duration::from_secs(0), // dummy, not needed
-                                size: 0,
+                                size: sent_bytes,
                                 delivered: 0,
                                 delivered_time: Instant::now(),
                                 first_sent_time: time_sent,
@@ -478,7 +478,7 @@ pub struct GRecovery {
     lost_reuse: Vec<Lost>,
 
     pacer: Pacer,
-    pub(crate) resume: own_resume::OwnResume,
+    pub(crate) resume: resume::Resume,
 }
 
 impl GRecovery {
@@ -543,7 +543,7 @@ impl GRecovery {
 
             newly_acked: Vec::new(),
             lost_reuse: Vec::new(),
-            resume: own_resume::OwnResume::new(SAVED_CC_FILE),
+            resume: resume::Resume::new(SAVED_CC_FILE),
         })
     }
 
@@ -760,13 +760,13 @@ impl RecoveryOps for GRecovery {
     ) {
         println!("-----using bbrv2!----");
         // COPIED FROM https://github.com/ana-cc/quiche/blob/resume_latest/quiche/src/recovery/mod.rs (12.08.2025)
-        let bytes_acked = self.resume.total_acked;
-        let iw_acked = bytes_acked >= self.pacer.get_initial_cwnd();
-        let state_str = self.state_str(now);
 
         if self.resume.enabled()
         //&& epoch == packet::Epoch::Application
         {
+            let bytes_acked = self.resume.total_acked;
+            let iw_acked = bytes_acked >= self.pacer.get_initial_cwnd();
+            let state_str = self.state_str(now);
             // Increase the congestion window by a jump determined by careful
             // resume
             self.pacer.set_congestion_window(self.resume.send_packet(
@@ -942,11 +942,14 @@ impl RecoveryOps for GRecovery {
     ) -> Result<OnAckReceivedOutcome> {
         // COPIED FROM https://github.com/ana-cc/quiche/blob/resume_latest/quiche/src/recovery/mod.rs (12.08.2025)
 
-        let bytes_acked = self.resume.total_acked;
-        let iw_acked =
-            bytes_acked >= self.pacer.get_initial_cwnd();
-        println!("in ack received, bytes acked: {:?}, iw: {:?}",bytes_acked,self.pacer.get_initial_cwnd());
         if self.resume.enabled() {
+            let bytes_acked = self.resume.total_acked;
+            let iw_acked = bytes_acked >= self.pacer.get_initial_cwnd();
+            println!(
+                "in ack received, bytes acked: {:?}, iw: {:?}",
+                bytes_acked,
+                self.pacer.get_initial_cwnd()
+            );
             for packet in self.newly_acked.iter() {
                 let largest_sent_pkt = self.epochs[epoch]
                     .sent_packets

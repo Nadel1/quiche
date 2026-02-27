@@ -27,7 +27,7 @@ pub enum CrState {
     Normal,
 }
 // TODO: add deleted qlog metrics back in
-pub struct OwnResume {
+pub struct Resume {
     in_state_timer: Instant,
     enabled: bool,
     cr_state: CrState,
@@ -40,7 +40,7 @@ pub struct OwnResume {
     rtt: Option<Duration>,
 }
 
-impl std::fmt::Debug for OwnResume {
+impl std::fmt::Debug for Resume {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "cr_state={:?} ", self.cr_state)?;
         write!(f, "saved_rtt={:?} ", self.saved_rtt)?;
@@ -51,7 +51,7 @@ impl std::fmt::Debug for OwnResume {
     }
 }
 
-impl OwnResume {
+impl Resume {
     pub fn new(file_name: &str) -> Self {
         // enabled will become false if either of the required CR ENV VARS is not
         // supplied

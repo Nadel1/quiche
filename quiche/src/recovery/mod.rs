@@ -2690,5 +2690,5 @@ mod bandwidth;
 mod bytes_in_flight;
 mod congestion;
 mod gcongestion;
-mod own_resume;
+mod resume;
 mod rtt;

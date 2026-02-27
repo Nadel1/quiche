@@ -36,7 +36,7 @@ use super::Sent;
 
 use crate::packet::Epoch;
 use crate::ranges::RangeSet;
-use crate::recovery::congestion::own_resume;
+use crate::recovery::congestion::resume;
 use crate::recovery::congestion::SsThresh;
 use crate::recovery::Acked;
 use crate::recovery::Bandwidth;
@@ -585,20 +585,14 @@ impl RecoveryOps for LegacyRecovery {
         &mut self, mut pkt: Sent, epoch: Epoch,
         handshake_status: HandshakeStatus, now: Instant, trace_id: &str,
     ) {
-        println!(
-            "on_packet_sent, resume enabled? {:?} with state {:?}",
-            self.congestion.resume.enabled(),
-            self.congestion.resume.get_state()
-        );
-        // COPIED FROM https://github.com/ana-cc/quiche/blob/resume_latest/quiche/src/recovery/mod.rs (12.08.2025)
-        let bytes_acked = self.congestion.resume.total_acked;
-        let iw_acked = bytes_acked >=
-            self.congestion.initial_congestion_window_packets *
-                self.congestion.max_datagram_size;
-
         if self.congestion.resume.enabled()
         //&& epoch == packet::Epoch::Application
         {
+            // COPIED FROM https://github.com/ana-cc/quiche/blob/resume_latest/quiche/src/recovery/mod.rs (12.08.2025)
+            let bytes_acked = self.congestion.resume.total_acked;
+            let iw_acked = bytes_acked >=
+                self.congestion.initial_congestion_window_packets *
+                    self.congestion.max_datagram_size;
             let largest_sent_pkt = self.epochs[epoch]
                 .sent_packets
                 .iter()
@@ -619,9 +613,9 @@ impl RecoveryOps for LegacyRecovery {
             // Pacing: Set the pacing rate if CC doesn't do its own.
             // COPIED from https://github.com/ana-cc/quiche/blob/resume_latest/quiche/src/recovery/congestion/mod.rs (14.08.2025)
             match self.congestion.resume.get_state() {
-                own_resume::CrState::Normal => {}, // do not do special pacing
+                resume::CrState::Normal => {}, // do not do special pacing
                 // (not possible)
-                own_resume::CrState::Unvalidated(_) => {
+                resume::CrState::Unvalidated(_) => {
                     let now = Instant::now();
 
                     if now - self.congestion.resume.get_state_timer() >
@@ -759,17 +753,18 @@ impl RecoveryOps for LegacyRecovery {
             self.detect_lost_packets(epoch, now, trace_id);
 
         // COPIED FROM https://github.com/ana-cc/quiche/blob/resume_latest/quiche/src/recovery/mod.rs (12.08.2025)
-        let bytes_acked = self.congestion.resume.total_acked;
-        let iw_acked =
-            bytes_acked >= self.congestion.initial_congestion_window_packets;
-        println!(
-            "in ack received, bytes acked: {:?}, iw: {:?}, cr enabled? {:?}",
-            bytes_acked,
-            self.congestion.initial_congestion_window_packets,
-            self.congestion.resume.enabled()
-        );
 
         if self.congestion.resume.enabled() {
+            let bytes_acked = self.congestion.resume.total_acked;
+            let iw_acked =
+                bytes_acked >= self.congestion.initial_congestion_window_packets;
+            println!(
+                "in ack received, bytes acked: {:?}, iw: {:?}, cr enabled? {:?}",
+                bytes_acked,
+                self.congestion.initial_congestion_window_packets,
+                self.congestion.resume.enabled()
+            );
+
             for packet in self.newly_acked.iter() {
                 let largest_sent_pkt = self.epochs[epoch]
                     .sent_packets
@@ -926,17 +921,15 @@ impl RecoveryOps for LegacyRecovery {
         if self.congestion.resume.enabled() {
             let cr_state = self.congestion.resume.get_state();
             match cr_state {
-                own_resume::CrState::Reconnaissance => {
+                resume::CrState::Reconnaissance => {
                     println!("Path changed, aborting CR!");
-                    self.congestion
-                        .resume
-                        .change_state(own_resume::CrState::Normal);
+                    self.congestion.resume.change_state(resume::CrState::Normal);
                 },
-                own_resume::CrState::Unvalidated(_) => {
+                resume::CrState::Unvalidated(_) => {
                     println!("Path changed, aborting CR!");
                     self.congestion
                         .resume
-                        .change_state(own_resume::CrState::SafeRetreat(0));
+                        .change_state(resume::CrState::SafeRetreat(0));
                 },
                 _ => {},
             }

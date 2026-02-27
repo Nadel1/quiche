@@ -35,7 +35,7 @@ use crate::recovery::Acked;
 use super::bandwidth::Bandwidth;
 use super::RecoveryConfig;
 use super::Sent;
-use crate::recovery::own_resume;
+use crate::recovery::resume;
 use crate::recovery::rtt;
 use crate::recovery::rtt::RttStats;
 use crate::recovery::CongestionControlAlgorithm;
@@ -126,7 +126,7 @@ pub struct Congestion {
 
     pub(crate) lost_count: usize,
     // Careful resume
-    pub(crate) resume: own_resume::OwnResume,
+    pub(crate) resume: resume::Resume,
 }
 
 impl Congestion {
@@ -166,7 +166,7 @@ impl Congestion {
 
             prr: prr::PRR::default(),
 
-            resume: own_resume::OwnResume::new(SAVED_CC_FILE),
+            resume: resume::Resume::new(SAVED_CC_FILE),
         };
 
         (cc.cc_ops.on_init)(&mut cc);
@@ -291,7 +291,7 @@ impl Congestion {
             rtt_stats,
         );
         match self.resume.get_state() {
-            own_resume::CrState::Normal => {
+            resume::CrState::Normal => {
                 self.calculate_saved_params(rtt_stats);
             },
             _ => {},
