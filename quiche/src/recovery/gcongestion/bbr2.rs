@@ -35,6 +35,7 @@ mod probe_bw;
 mod probe_rtt;
 mod startup;
 
+use std::fs::File;
 use std::time::Duration;
 use std::time::Instant;
 use std::time::SystemTime;
@@ -210,7 +211,7 @@ struct Params {
     /// setting `time_sent` to `now` is bounded.
     time_sent_set_to_now: bool,
 
-    carefully_resuming:bool,
+    carefully_resuming: bool,
 }
 
 impl Params {
@@ -352,7 +353,7 @@ const DEFAULT_PARAMS: Params = Params {
 
     time_sent_set_to_now: true,
 
-    carefully_resuming:false,
+    carefully_resuming: false,
 };
 
 #[derive(Debug, PartialEq)]
@@ -444,6 +445,7 @@ pub(crate) struct BBRv2 {
     has_non_app_limited_sample: bool,
     last_quiescence_start: Option<Instant>,
     params: Params,
+    logging_name: String,
 }
 
 struct BBRv2CongestionEvent {
@@ -506,10 +508,9 @@ impl BBRv2 {
     pub fn new(
         initial_congestion_window: usize, max_congestion_window: usize,
         max_segment_size: usize, smoothed_rtt: Duration,
-        custom_bbr_params: Option<&BbrParams>,
-        logging_name:String,
+        custom_bbr_params: Option<&BbrParams>, logging_name: String,
     ) -> Self {
-        println!("-----using bbrv2!, logging_name: {:?}----",logging_name);
+        println!("-----using bbrv2!, logging_name: {:?}----", logging_name);
         let cwnd = initial_congestion_window * max_segment_size;
 
         let params = if let Some(custom_bbr_settings) = custom_bbr_params {
@@ -532,12 +533,38 @@ impl BBRv2 {
             last_quiescence_start: None,
             mss: max_segment_size,
             params,
-
+            logging_name: logging_name.clone(),
         }
     }
 
     pub fn time_sent_set_to_now(&self) -> bool {
         self.params.time_sent_set_to_now
+    }
+
+    pub fn write_to_log(&self, sent: bool, logging_values: Vec<u128>) {
+        use std::io::Write;
+        if self.logging_name == "" {
+            return;
+        }
+        let mut file = File::options()
+            .append(true)
+            .open(self.logging_name.clone())
+            .unwrap();
+        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH);
+        let mut save_string = timestamp.unwrap().as_secs().to_string().to_owned();
+        save_string.push_str(",");
+        if sent {
+            save_string.push_str("SENT");
+        } else {
+            save_string.push_str("RECEIVED");
+        }
+        let vec_iter = logging_values.iter();
+        for val in vec_iter {
+            save_string.push_str(",");
+            save_string.push_str(&val.to_string());
+        }
+        save_string.push_str("\n");
+        let _ = file.write_all(save_string.as_bytes());
     }
 
     fn on_exit_quiescence(&mut self, now: Instant) {
@@ -551,7 +578,7 @@ impl BBRv2 {
     }
 
     pub fn get_initial_cwnd(&self) -> usize {
-        self.initial_cwnd/self.mss
+        self.initial_cwnd / self.mss
     }
 
     fn get_target_congestion_window(&self, gain: f32) -> usize {
@@ -561,8 +588,8 @@ impl BBRv2 {
             .max(self.cwnd_limits.min())
     }
 
-    pub fn set_pacing_rate(&mut self, pacing_rate:Bandwidth){
-        self.pacing_rate=pacing_rate;
+    pub fn set_pacing_rate(&mut self, pacing_rate: Bandwidth) {
+        self.pacing_rate = pacing_rate;
     }
 
     fn update_pacing_rate(&mut self, bytes_acked: usize) {
@@ -761,9 +788,10 @@ impl CongestionControl for BBRv2 {
         network_model.on_packet_neutered(packet_number);
     }
 
-    fn is_app_limited(&self)->bool{
+    fn is_app_limited(&self) -> bool {
         self.last_sample_is_app_limited
     }
+
     fn on_retransmission_timeout(&mut self, _packets_retransmitted: bool) {}
 
     fn on_connection_migration(&mut self) {}
@@ -816,7 +844,6 @@ impl CongestionControl for BBRv2 {
         let network_model = self.mode.network_model_mut();
         network_model.on_app_limited()
     }
-
 
     fn limit_cwnd(&mut self, max_cwnd: usize) {
         self.cwnd_limits.hi = max_cwnd

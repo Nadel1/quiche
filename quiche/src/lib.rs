@@ -2263,31 +2263,7 @@ impl<F: BufFactory> Connection<F> {
         self.encode_transport_params()
     }
 
-    pub fn write_to_log(&self, sent: bool, logging_values: Vec<u128>) {
-        use std::io::Write;
-        if self.logging_name == "" {
-            return;
-        }
-        let mut file = File::options()
-            .append(true)
-            .open(self.logging_name.clone())
-            .unwrap();
-        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH);
-        let mut save_string = timestamp.unwrap().as_secs().to_string().to_owned();
-        save_string.push_str(",");
-        if sent {
-            save_string.push_str("SENT");
-        } else {
-            save_string.push_str("RECEIVED");
-        }
-        let vec_iter = logging_values.iter();
-        for val in vec_iter {
-            save_string.push_str(",");
-            save_string.push_str(&val.to_string());
-        }
-        save_string.push_str("\n");
-        let _ = file.write_all(save_string.as_bytes());
-    }
+
 
     /// Sets the congestion control algorithm used.
     ///
@@ -5178,7 +5154,7 @@ impl<F: BufFactory> Connection<F> {
             max_bw,
         ];
 
-        self.write_to_log(true, logging_values);
+        //self.write_to_log(true, logging_values);
 
         Ok((pkt_type, written))
     }
@@ -8375,7 +8351,7 @@ impl<F: BufFactory> Connection<F> {
 
             frame::Frame::DatagramHeader { .. } => unreachable!(),
         }
-        self.write_to_log(false, logging_values);
+        //self.write_to_log(false, logging_values);
         Ok(())
     }
 
