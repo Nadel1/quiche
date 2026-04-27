@@ -143,7 +143,7 @@ impl std::fmt::Debug for LossDetectionTimer {
     }
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct RecoveryConfig {
     pub initial_rtt: Duration,
     pub max_send_udp_payload_size: usize,
@@ -155,6 +155,7 @@ pub struct RecoveryConfig {
     pub max_pacing_rate: Option<u64>,
     pub initial_congestion_window_packets: usize,
     pub enable_relaxed_loss_threshold: bool,
+    pub logging_name:String,
 }
 
 impl RecoveryConfig {
@@ -171,6 +172,7 @@ impl RecoveryConfig {
             initial_congestion_window_packets: config
                 .initial_congestion_window_packets,
             enable_relaxed_loss_threshold: config.enable_relaxed_loss_threshold,
+            logging_name:config.logging_name.clone(),
         }
     }
 }

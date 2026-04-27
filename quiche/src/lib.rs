@@ -2058,7 +2058,7 @@ impl<F: BufFactory> Connection<F> {
                 .append(true)
                 .open(config.logging_name.clone())
                 .unwrap();
-            let save_string = "TIMESTAMP,SENT/RECEIVED,PACKET_NUM,PACKET_SIZE,CWND,BYTES_IN_FLIGHT,RTT,PTO\n";
+            let save_string = "TIMESTAMP,SENT/RECEIVED,PACKET_NUM,PACKET_SIZE,CWND,BYTES_IN_FLIGHT,RTT,PTO,RTT_VAR,MAX_BW,LOST_COUNT,ACK_DELAY,IS_APP_LIMITED,\n";
             let _ = file.write_all(save_string.as_bytes());
         }
 
@@ -3617,21 +3617,7 @@ impl<F: BufFactory> Connection<F> {
 
         self.ack_eliciting_sent = false;
 
-        let path = self.paths.get_mut(recv_pid)?;
-        // It's fine to set the skip counter based on a non-active path's values.
-        let cwnd = path.recovery.cwnd();
-        let rtt = path.recovery.rtt().as_micros();
-        let bytes_in_flight = path.recovery.bytes_in_flight();
-        let logging_values = vec![
-            pn as u128,
-            read as u128,
-            cwnd as u128,
-            bytes_in_flight as u128,
-            rtt as u128,
-            path.recovery.pto().as_micros(),
-            path.recovery.rttvar().as_micros(),
-        ];
-        self.write_to_log(false, logging_values);
+        
 
         Ok(read)
     }
@@ -5180,17 +5166,18 @@ impl<F: BufFactory> Connection<F> {
 
         let rtt = active_path.recovery.rtt().as_micros();
         let bytes_in_flight = active_path.recovery.bytes_in_flight();
-
+        let max_bw=active_path.recovery.max_bandwidth().unwrap().bits_per_second as u128;
         let logging_values = vec![
             pn as u128,
-            if ack_eliciting { written } else { 0 } as u128,
+            0,//used to be packet size, not needed rn
             cwnd as u128,
             bytes_in_flight as u128,
             rtt as u128,
             active_path.recovery.pto().as_micros(),
             active_path.recovery.rttvar().as_micros(),
-            active_path.recovery.pto().as_micros(),
+            max_bw,
         ];
+
         self.write_to_log(true, logging_values);
 
         Ok((pkt_type, written))
@@ -7563,7 +7550,7 @@ impl<F: BufFactory> Connection<F> {
 
             local_transport_params: self.local_transport_params.clone(),
 
-            recovery_config: self.recovery_config,
+            recovery_config: self.recovery_config.clone(),
 
             tx_cap_factor: self.tx_cap_factor,
 
@@ -7811,6 +7798,28 @@ impl<F: BufFactory> Connection<F> {
     ) -> Result<()> {
         trace!("{} rx frm {:?}", self.trace_id, frame);
 
+        let path: &mut path::Path = self.paths.get_mut(recv_path_id)?;
+        // It's fine to set the skip counter based on a non-active path's values.
+        let cwnd = path.recovery.cwnd();
+        let max_bw=path.recovery.max_bandwidth().unwrap().bits_per_second as u128;
+        let rtt = path.recovery.rtt().as_micros();
+        let bytes_in_flight = path.recovery.bytes_in_flight();
+        let lost_count=path.recovery.lost_count();
+
+
+        let mut logging_values = vec![
+            hdr.pkt_num as u128,
+            0 as u128,//makes evaluation easier later on
+            cwnd as u128,
+            bytes_in_flight as u128,
+            rtt as u128,
+            path.recovery.pto().as_micros(),
+            path.recovery.rttvar().as_micros(),
+            max_bw,
+            lost_count as u128,
+            
+        ];
+        
         match frame {
             frame::Frame::Padding { .. } => (),
 
@@ -7839,6 +7848,8 @@ impl<F: BufFactory> Connection<F> {
                 let largest_acked = ranges.last().expect(
                     "ACK frames should always have at least one ack range",
                 );
+                logging_values.push(ack_delay as u128);
+                logging_values.push(is_app_limited as u128);
 
                 for (_, p) in self.paths.iter_mut() {
                     if self.pkt_num_spaces[epoch]
@@ -7855,7 +7866,7 @@ impl<F: BufFactory> Connection<F> {
                     if is_app_limited {
                         p.recovery.delivery_rate_update_app_limited(true);
                     }
-
+                    
                     let OnAckReceivedOutcome {
                         lost_packets,
                         lost_bytes,
@@ -8364,7 +8375,7 @@ impl<F: BufFactory> Connection<F> {
 
             frame::Frame::DatagramHeader { .. } => unreachable!(),
         }
-
+        self.write_to_log(false, logging_values);
         Ok(())
     }
 

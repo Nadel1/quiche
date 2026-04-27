@@ -507,8 +507,9 @@ impl BBRv2 {
         initial_congestion_window: usize, max_congestion_window: usize,
         max_segment_size: usize, smoothed_rtt: Duration,
         custom_bbr_params: Option<&BbrParams>,
+        logging_name:String,
     ) -> Self {
-        println!("-----using bbrv2!----");
+        println!("-----using bbrv2!, logging_name: {:?}----",logging_name);
         let cwnd = initial_congestion_window * max_segment_size;
 
         let params = if let Some(custom_bbr_settings) = custom_bbr_params {
@@ -851,6 +852,7 @@ mod tests {
             INIT_PACKET_SIZE,
             initial_rtt,
             Some(bbr_params),
+            "".as_string(),
         );
 
         assert_eq!(bbr2.cwnd_limits.lo, INIT_CWND);

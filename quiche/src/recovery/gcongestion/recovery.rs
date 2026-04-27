@@ -500,6 +500,7 @@ impl GRecovery {
                 recovery_config.max_send_udp_payload_size,
                 recovery_config.initial_rtt,
                 recovery_config.custom_bbr_params.as_ref(),
+                recovery_config.logging_name.clone(),
             ),
             _ => return None,
         };
