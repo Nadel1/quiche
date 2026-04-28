@@ -448,6 +448,7 @@ pub(crate) struct BBRv2 {
     logging_name: String,
 }
 
+
 struct BBRv2CongestionEvent {
     event_time: Instant,
 
@@ -511,6 +512,19 @@ impl BBRv2 {
         custom_bbr_params: Option<&BbrParams>, logging_name: String,
     ) -> Self {
         println!("-----using bbrv2!, logging_name: {:?}----", logging_name);
+        if logging_name != "" {
+
+            File::create(logging_name.clone()).unwrap();
+
+            use std::io::Write; // has to be included here, otherwise issues with other write calls
+            let mut file = File::options()
+                .append(true)
+                .open(logging_name.clone())
+                .unwrap();
+            let save_string = "TIMESTAMP,MODE,CWND,CWND_GAIN,PACING_RATE,PACING_GAIN,BYTES_IN_FLIGHT,PRIOR_IN_FLIGHT,BW_ESTIMATE,MAX_BYTES_DELIVERED_IN_ROUND,TOTAL_BYTES_ACKED,LATEST_RTT,MAX_RTT,\n";
+            let _ = file.write_all(save_string.as_bytes());
+        }
+
         let cwnd = initial_congestion_window * max_segment_size;
 
         let params = if let Some(custom_bbr_settings) = custom_bbr_params {
@@ -541,7 +555,7 @@ impl BBRv2 {
         self.params.time_sent_set_to_now
     }
 
-    pub fn write_to_log(&self, sent: bool, logging_values: Vec<u128>) {
+    pub fn write_to_log(&self, sent_from: String, logging_values: Vec<u128>) {
         use std::io::Write;
         if self.logging_name == "" {
             return;
@@ -553,11 +567,8 @@ impl BBRv2 {
         let timestamp = SystemTime::now().duration_since(UNIX_EPOCH);
         let mut save_string = timestamp.unwrap().as_secs().to_string().to_owned();
         save_string.push_str(",");
-        if sent {
-            save_string.push_str("SENT");
-        } else {
-            save_string.push_str("RECEIVED");
-        }
+        save_string.push_str(&sent_from);
+        
         let vec_iter = logging_values.iter();
         for val in vec_iter {
             save_string.push_str(",");
@@ -593,6 +604,7 @@ impl BBRv2 {
     }
 
     fn update_pacing_rate(&mut self, bytes_acked: usize) {
+        println!("updating pacing rate");
         let network_model = self.mode.network_model();
         let bandwidth_estimate = match network_model.bandwidth_estimate() {
             e if e == Bandwidth::zero() => return,
@@ -645,6 +657,7 @@ impl BBRv2 {
     }
 
     fn update_congestion_window(&mut self, bytes_acked: usize) {
+        println!("update cwnd");
         let network_model = self.mode.network_model();
         let mut target_cwnd =
             self.get_target_congestion_window(network_model.cwnd_gain());
@@ -728,7 +741,7 @@ impl CongestionControl for BBRv2 {
     fn on_congestion_event(
         &mut self, _rtt_updated: bool, prior_in_flight: usize,
         _bytes_in_flight: usize, event_time: Instant, acked_packets: &[Acked],
-        lost_packets: &[Lost], least_unacked: u64, _rtt_stats: &RttStats,
+        lost_packets: &[Lost], least_unacked: u64, rtt_stats: &RttStats,
         recovery_stats: &mut RecoveryStats,
     ) {
         let mut congestion_event = BBRv2CongestionEvent::new(
@@ -776,11 +789,32 @@ impl CongestionControl for BBRv2 {
         if !self.last_sample_is_app_limited {
             self.has_non_app_limited_sample = true;
         }
+        let logging_values = vec![
+        
+            self.cwnd as u128,
+            network_model.cwnd_gain() as u128,
+            self.pacing_rate.bits_per_second as u128,
+            network_model.pacing_gain() as u128,
+
+            congestion_event.bytes_in_flight as u128,
+            prior_in_flight as u128,
+            
+            network_model.bandwidth_estimate().bits_per_second as u128,
+            network_model.max_bytes_delivered_in_round() as u128,
+            network_model.total_bytes_acked() as u128,
+         
+            rtt_stats.latest_rtt().as_micros() as u128,
+            rtt_stats.max_rtt().unwrap().as_micros() as u128,
+            
+        ];
+        self.write_to_log(self.mode.to_string(), logging_values);
         if congestion_event.bytes_in_flight == 0 &&
             self.params.avoid_unnecessary_probe_rtt
         {
             self.on_enter_quiescence(event_time);
         }
+        
+        
     }
 
     fn on_packet_neutered(&mut self, packet_number: u64) {

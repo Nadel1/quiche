@@ -2050,17 +2050,17 @@ impl<F: BufFactory> Connection<F> {
             max_amplification_factor: config.max_amplification_factor,
             logging_name: config.logging_name.clone(),
         };
-        if config.logging_name != "" {
-            File::create(config.logging_name.clone()).unwrap();
-
-            use std::io::Write; // has to be included here, otherwise issues with other write calls
-            let mut file = File::options()
-                .append(true)
-                .open(config.logging_name.clone())
-                .unwrap();
-            let save_string = "TIMESTAMP,SENT/RECEIVED,PACKET_NUM,PACKET_SIZE,CWND,BYTES_IN_FLIGHT,RTT,PTO,RTT_VAR,MAX_BW,LOST_COUNT,ACK_DELAY,IS_APP_LIMITED,\n";
-            let _ = file.write_all(save_string.as_bytes());
-        }
+        //if config.logging_name != "" {
+        //    File::create(config.logging_name.clone()).unwrap();
+//
+        //    use std::io::Write; // has to be included here, otherwise issues with other write calls
+        //    let mut file = File::options()
+        //        .append(true)
+        //        .open(config.logging_name.clone())
+        //        .unwrap();
+        //    let save_string = "TIMESTAMP,SENT/RECEIVED,PACKET_NUM,PACKET_SIZE,CWND,BYTES_IN_FLIGHT,RTT,PTO,RTT_VAR,MAX_BW,LOST_COUNT,ACK_DELAY,IS_APP_LIMITED,\n";
+        //    let _ = file.write_all(save_string.as_bytes());
+        //}
 
         if let Some(retry_cids) = retry_cids {
             conn.local_transport_params

@@ -28,6 +28,7 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::fmt;
 use std::fmt::Debug;
 use std::time::Duration;
 use std::time::Instant;
@@ -165,7 +166,24 @@ impl Default for Mode {
     }
 }
 
+impl fmt::Display for Mode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+
+        match self {
+            Mode::Startup(Startup { model }) =>  write!(f, "Startup"),
+            Mode::Drain(Drain { model, .. }) =>  write!(f, "Drain"),
+            Mode::ProbeBW(ProbeBW { model, .. }) =>  write!(f, "ProbeBW"),
+            Mode::ProbeRTT(ProbeRTT { model, .. }) =>  write!(f, "ProbeRTT"),
+            Mode::Placheolder(_) => unreachable!(),
+        }
+       
+        // or, alternatively:
+        // fmt::Debug::fmt(self, f)
+    }
+}
+
 impl Mode {
+
     pub(super) fn startup(model: BBRv2NetworkModel) -> Self {
         Mode::Startup(Startup { model })
     }
