@@ -521,7 +521,8 @@ impl BBRv2 {
                 .append(true)
                 .open(logging_name.clone())
                 .unwrap();
-            let save_string = "TIMESTAMP,MODE,CWND,CWND_GAIN,MAX_RTT,MIN_RTT,SAMPLE_MIN_RTT,EVENT_TIME,MIN_RTT_TIME,\n";
+            let save_string = "TIMESTAMP,MODE,CWND,CWND_GAIN,BYTES_IN_FLIGHT,PACKET_NUMBER,BYTES,AVOID_UNNECESSARY_PROBE_RTT,MIN_RTT_TIME,\n";
+        
 
             let _ = file.write_all(save_string.as_bytes());
         }
@@ -737,6 +738,34 @@ impl CongestionControl for BBRv2 {
             bytes,
             is_retransmissible,
         );
+
+        let logging_values = vec![
+        
+            self.cwnd as u128,
+            network_model.cwnd_gain() as u128,
+            bytes_in_flight as u128,
+            packet_number as u128,
+            bytes as u128,
+            self.params.avoid_unnecessary_probe_rtt as u128,
+            //self.pacing_rate.bits_per_second as u128,
+            //network_model.pacing_gain() as u128,
+            //congestion_event.bytes_in_flight as u128,
+            //prior_in_flight as u128,
+            //network_model.bandwidth_estimate().bits_per_second as u128,
+            //network_model.max_bytes_delivered_in_round() as u128,
+            //network_model.total_bytes_acked() as u128,
+            //rtt_stats.latest_rtt().as_micros() as u128,
+            //rtt_stats.max_rtt().unwrap().as_micros() as u128,
+//
+            //rtt_stats.min_rtt().unwrap().as_micros() as u128,
+//
+            //log_sample_min_rtt,
+            ////congestion_event.sample_min_rtt.unwrap().as_micros() as u128,
+            //congestion_event.event_time.elapsed().as_micros() as u128,
+            network_model.min_rtt_timestamp().elapsed().as_micros() as u128,
+
+        ];
+        self.write_to_log(self.mode.to_string(), logging_values);
     }
 
     fn on_congestion_event(
@@ -795,29 +824,33 @@ impl CongestionControl for BBRv2 {
         if !sample_min_rtt.is_none(){
             log_sample_min_rtt=sample_min_rtt.unwrap().as_micros() as u128;
         }
-        let logging_values = vec![
         
-            self.cwnd as u128,
-            network_model.cwnd_gain() as u128,
-            //self.pacing_rate.bits_per_second as u128,
-            //network_model.pacing_gain() as u128,
-            //congestion_event.bytes_in_flight as u128,
-            //prior_in_flight as u128,
-            //network_model.bandwidth_estimate().bits_per_second as u128,
-            //network_model.max_bytes_delivered_in_round() as u128,
-            //network_model.total_bytes_acked() as u128,
-            //rtt_stats.latest_rtt().as_micros() as u128,
-            rtt_stats.max_rtt().unwrap().as_micros() as u128,
-
-            rtt_stats.min_rtt().unwrap().as_micros() as u128,
-
-            log_sample_min_rtt,
-            //congestion_event.sample_min_rtt.unwrap().as_micros() as u128,
-            congestion_event.event_time.elapsed().as_micros() as u128,
-            network_model.min_rtt_timestamp().elapsed().as_micros() as u128,
-
-        ];
-        self.write_to_log(self.mode.to_string(), logging_values);
+        //let logging_values = vec![
+        //
+        //    self.cwnd as u128,
+        //    network_model.cwnd_gain() as u128,
+        //    log_sample_min_rtt,
+//
+//
+        //    //self.pacing_rate.bits_per_second as u128,
+        //    //network_model.pacing_gain() as u128,
+        //    //congestion_event.bytes_in_flight as u128,
+        //    //prior_in_flight as u128,
+        //    //network_model.bandwidth_estimate().bits_per_second as u128,
+        //    //network_model.max_bytes_delivered_in_round() as u128,
+        //    //network_model.total_bytes_acked() as u128,
+        //    //rtt_stats.latest_rtt().as_micros() as u128,
+        //    //rtt_stats.max_rtt().unwrap().as_micros() as u128,
+////
+        //    //rtt_stats.min_rtt().unwrap().as_micros() as u128,
+////
+        //    //log_sample_min_rtt,
+        //    ////congestion_event.sample_min_rtt.unwrap().as_micros() as u128,
+        //    //congestion_event.event_time.elapsed().as_micros() as u128,
+        //    network_model.min_rtt_timestamp().elapsed().as_micros() as u128,
+//
+        //];
+        //self.write_to_log(self.mode.to_string(), logging_values);
         if congestion_event.bytes_in_flight == 0 &&
             self.params.avoid_unnecessary_probe_rtt
         {

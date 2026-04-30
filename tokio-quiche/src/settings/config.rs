@@ -77,7 +77,10 @@ impl Config {
                     .ok()
             } else {
                 log::warn!("SSLKEYLOGFILE is set, but `--cfg capture_keylogs` was not enabled. No keys will be logged.");
-                None
+               File::options().create(true).append(true).open(path)
+                    .inspect_err(|e| log::warn!("failed to open SSLKEYLOGFILE"; "error" => e))
+                    .ok()
+                //None
             });
 
         let SocketCapabilities {
@@ -92,7 +95,7 @@ impl Config {
         let pacing_offload = quic_settings.enable_pacing && pacing_offload;
 
         Ok(Config {
-            quiche_config: make_quiche_config(params, keylog_file.is_some())?,
+            quiche_config: make_quiche_config(params, true)?,
             disable_client_ip_validation: quic_settings
                 .disable_client_ip_validation,
             qlog_dir: quic_settings.qlog_dir.clone(),
@@ -113,6 +116,7 @@ impl Config {
 fn make_quiche_config(
     params: &ConnectionParams, should_log_keys: bool,
 ) -> QuicResult<quiche::Config> {
+    println!("make_quiche_conig");
     let ssl_ctx_builder = params
         .hooks
         .connection_hook
