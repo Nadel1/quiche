@@ -127,6 +127,7 @@ impl ModeImpl for ProbeBW {
                     self.model.maybe_expire_min_rtt(congestion_event, params)
                 {
                     switch_to_probe_rtt = true;
+                    println!("Switch to probe rtt set to true");
                 }
             },
             CyclePhase::Cruise => self.update_probe_cruise(
@@ -185,6 +186,7 @@ impl ModeImpl for ProbeBW {
     fn on_exit_quiescence(
         mut self, now: Instant, quiescence_start_time: Instant, _params: &Params,
     ) -> Mode {
+        println!("On exit quiescence; afterwards postone_min_rtt with force update is called");
         self.model
             .postpone_min_rtt_timestamp(now - quiescence_start_time);
         Mode::ProbeBW(self)

@@ -122,7 +122,7 @@ impl Resume {
         if self.enabled {
             self.cr_state != CrState::Normal
         } else {
-            println!("the enabled function is the issue");
+
             if self.cr_state != CrState::Normal {
                 self.change_state(CrState::Normal);
             }

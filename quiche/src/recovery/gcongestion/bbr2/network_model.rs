@@ -92,12 +92,16 @@ impl MinRttFilter {
 
     fn update(&mut self, sample_rtt: Duration, now: Instant) {
         if sample_rtt < self.min_rtt {
+            println!("Updating min_rtt");
             self.min_rtt = sample_rtt;
             self.min_rtt_timestamp = now;
+        }else{
+            println!("Not updating min_rtt: {:?} not smaller than {:?}", sample_rtt.as_micros(),self.min_rtt.as_micros());
         }
     }
 
     fn force_update(&mut self, sample_rtt: Duration, now: Instant) {
+        println!("Force updating min_rtt to {:?} with timestamp {:?}", sample_rtt.as_micros(),now.elapsed().as_micros());
         self.min_rtt = sample_rtt;
         self.min_rtt_timestamp = now;
     }
@@ -363,6 +367,7 @@ impl BBRv2NetworkModel {
         }
 
         if let Some(rtt_sample) = sample.sample_rtt {
+            println!("Rtt sample: {:?}, event time: {:?}",rtt_sample, event_time.elapsed().as_micros() );
             congestion_event.sample_min_rtt = Some(rtt_sample);
             self.min_rtt_filter.update(rtt_sample, event_time);
         }
@@ -574,7 +579,7 @@ impl BBRv2NetworkModel {
         {
             return false;
         }
-
+        println!("In maybe expire min rtt");
         self.min_rtt_filter.force_update(
             congestion_event.sample_min_rtt.unwrap(),
             congestion_event.event_time,
