@@ -28,9 +28,12 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::fs::File;
 use std::ops::Add;
 use std::time::Duration;
 use std::time::Instant;
+use std::time::SystemTime;
+use std::time::UNIX_EPOCH;
 
 use crate::recovery::gcongestion::bbr::BandwidthSampler;
 use crate::recovery::gcongestion::bbr2::Params;
@@ -40,7 +43,6 @@ use crate::recovery::gcongestion::Lost;
 use super::Acked;
 use super::BBRv2CongestionEvent;
 use super::BwLoMode;
-
 
 pub(super) const DEFAULT_MSS: usize = 1300;
 
@@ -92,16 +94,25 @@ impl MinRttFilter {
 
     fn update(&mut self, sample_rtt: Duration, now: Instant) {
         if sample_rtt < self.min_rtt {
-            println!("Updating min_rtt");
+            println!("Updating min_rtt to {:?}", sample_rtt.as_micros());
             self.min_rtt = sample_rtt;
             self.min_rtt_timestamp = now;
-        }else{
-            println!("Not updating min_rtt: {:?} not smaller than {:?}", sample_rtt.as_micros(),self.min_rtt.as_micros());
+        } else {
+            println!(
+                "Not updating min_rtt: {:?} not smaller than {:?}",
+                sample_rtt.as_micros(),
+                self.min_rtt.as_micros()
+            );
         }
     }
 
     fn force_update(&mut self, sample_rtt: Duration, now: Instant) {
-        println!("Force updating min_rtt to {:?} with timestamp {:?}", sample_rtt.as_micros(),now.elapsed().as_micros());
+        println!(
+            "Force updating min_rtt to {:?} with timestamp {:?}",
+            sample_rtt.as_micros(),
+            now.elapsed().as_micros()
+        );
+
         self.min_rtt = sample_rtt;
         self.min_rtt_timestamp = now;
     }
@@ -196,10 +207,26 @@ pub(super) struct BBRv2NetworkModel {
     latest_send_rate: Option<Bandwidth>,
     /// The most recent ack rate from the BandwidthSampler.
     latest_ack_rate: Option<Bandwidth>,
+    logging_name: String,
 }
 
 impl BBRv2NetworkModel {
-    pub(super) fn new(params: &Params, initial_rtt: Duration) -> Self {
+    pub(super) fn new(
+        params: &Params, initial_rtt: Duration, logging_name: String,
+    ) -> Self {
+        println!("-----using bbrv2!, logging_name: {:?}----", logging_name);
+        if logging_name != "" {
+            File::create(logging_name.clone()).unwrap();
+
+            use std::io::Write; // has to be included here, otherwise issues with other write calls
+            let mut file = File::options()
+                .append(true)
+                .open(logging_name.clone())
+                .unwrap();
+            let save_string = "TIMESTAMP,CYCLE,IS_RISKY,IS_QUEUEING,QUEUING_ROUNDS,MIN_BYTES_IN_FLIGHT,CWND_GAIN,PACING_GAIN,INFLIGHT_HI,EVENT_TIME,PRIOR_CWND,PRIOR_BYTES_IN_FLIGHT,BYTES_IN_FLIGHT,BYTES_ACKED,BYTES_LOST,END_OF_ROUNDTRIP,PROBING_FOR_BW,MAX_BW,MIN_RTT,SEND_STATE_VALID,SEND_STATE_APP_LIMITED,SEND_STATE_TOTAL_BYTES_SENT,SEND_STATE_TOTAL_BYTES_ACKED,SEND_STATE_BYTES_LOST,SEND_STATE_BYTES_IN_FLIGHT,\n";
+
+            let _ = file.write_all(save_string.as_bytes());
+        };
         BBRv2NetworkModel {
             min_bytes_in_flight_in_round: usize::MAX,
             inflight_hi_limited_in_round: false,
@@ -243,6 +270,7 @@ impl BBRv2NetworkModel {
 
             latest_send_rate: None,
             latest_ack_rate: None,
+            logging_name,
         }
     }
 
@@ -289,6 +317,10 @@ impl BBRv2NetworkModel {
 
     pub(super) fn max_bandwidth(&self) -> Bandwidth {
         self.max_bandwidth_filter.get()
+    }
+
+    pub fn min_bytes_in_flight_in_round(&self) -> usize {
+        self.min_bytes_in_flight_in_round
     }
 
     pub(super) fn on_packet_sent(
@@ -367,7 +399,11 @@ impl BBRv2NetworkModel {
         }
 
         if let Some(rtt_sample) = sample.sample_rtt {
-            println!("Rtt sample: {:?}, event time: {:?}",rtt_sample, event_time.elapsed().as_micros() );
+            println!(
+                "Rtt sample: {:?}, event time: {:?}",
+                rtt_sample,
+                event_time.elapsed().as_micros()
+            );
             congestion_event.sample_min_rtt = Some(rtt_sample);
             self.min_rtt_filter.update(rtt_sample, event_time);
         }
@@ -565,6 +601,29 @@ impl BBRv2NetworkModel {
 
         self.bandwidth_sampler
             .remove_obsolete_packets(least_unacked_packet);
+    }
+
+    pub fn write_to_log(&self, sent_from: String, logging_values: Vec<u128>) {
+        use std::io::Write;
+        if self.logging_name == "" {
+            return;
+        }
+        let mut file = File::options()
+            .append(true)
+            .open(self.logging_name.clone())
+            .unwrap();
+        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH);
+        let mut save_string = timestamp.unwrap().as_secs().to_string().to_owned();
+        save_string.push_str(",");
+        save_string.push_str(&sent_from);
+
+        let vec_iter = logging_values.iter();
+        for val in vec_iter {
+            save_string.push_str(",");
+            save_string.push_str(&val.to_string());
+        }
+        save_string.push_str("\n");
+        let _ = file.write_all(save_string.as_bytes());
     }
 
     pub(super) fn maybe_expire_min_rtt(

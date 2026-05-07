@@ -95,7 +95,7 @@ impl ModeImpl for ProbeBW {
         mut self, prior_in_flight: usize, event_time: Instant, _: &[Acked],
         _: &[Lost], congestion_event: &mut BBRv2CongestionEvent,
         target_bytes_inflight: usize, params: &Params,
-        _recovery_stats: &mut RecoveryStats, _cwnd: usize,
+        _recovery_stats: &mut RecoveryStats, cwnd: usize,
     ) -> Mode {
         if congestion_event.end_of_round_trip {
             if self.cycle.start_time != event_time {
@@ -108,6 +108,23 @@ impl ModeImpl for ProbeBW {
         }
 
         let mut switch_to_probe_rtt = false;
+
+        // let logging_values = vec![
+        //    cwnd as u128,
+        //    self.model.cwnd_gain() as u128,
+        //    self.model.pacing_gain() as u128,
+        //    congestion_event.end_of_round_trip as u128,
+        //
+        //];
+        // let cycle_string:String;
+        // match self.cycle.phase {
+        //    CyclePhase::NotStarted => unreachable!(),
+        //    CyclePhase::Up => cycle_string="UP".to_owned(),
+        //    CyclePhase::Down => cycle_string="DOWN".to_owned(),
+        //    CyclePhase::Cruise => cycle_string="CRUISE".to_owned(),
+        //    CyclePhase::Refill => cycle_string="REFILL".to_owned(),
+        //}
+        // self.model.write_to_log(cycle_string, logging_values);
 
         match self.cycle.phase {
             CyclePhase::NotStarted => unreachable!(),
@@ -186,7 +203,7 @@ impl ModeImpl for ProbeBW {
     fn on_exit_quiescence(
         mut self, now: Instant, quiescence_start_time: Instant, _params: &Params,
     ) -> Mode {
-        println!("On exit quiescence; afterwards postone_min_rtt with force update is called");
+        println!("On exit quiescence; afterwards postone_min_rtt with force update is called with parameter: {:?}",(now - quiescence_start_time).as_micros());
         self.model
             .postpone_min_rtt_timestamp(now - quiescence_start_time);
         Mode::ProbeBW(self)
@@ -387,6 +404,53 @@ impl ProbeBW {
         &mut self, prior_in_flight: usize, target_bytes_inflight: usize,
         congestion_event: &BBRv2CongestionEvent, params: &Params,
     ) {
+        let optional_max_bw = congestion_event.sample_max_bandwidth;
+        let mut max_bw = 0;
+        if !optional_max_bw.is_none() {
+            max_bw = optional_max_bw.unwrap().bits_per_second as u128;
+        }
+
+        let optional_min_rtt = congestion_event.sample_min_rtt;
+        let mut min_rtt = 0;
+        if !optional_min_rtt.is_none() {
+            min_rtt = optional_min_rtt.unwrap().as_millis();
+        }
+        let logging_values = vec![
+            false as u128,
+            false as u128,
+            self.model.rounds_with_queueing() as u128,
+            self.model.min_bytes_in_flight_in_round() as u128,
+            self.model.cwnd_gain() as u128,
+            self.model.pacing_gain() as u128,
+            self.model.inflight_hi() as u128,
+            congestion_event.event_time.elapsed().as_millis() as u128,
+            congestion_event.prior_cwnd as u128,
+            congestion_event.prior_bytes_in_flight as u128,
+            congestion_event.bytes_in_flight as u128,
+            congestion_event.bytes_acked as u128,
+            congestion_event.bytes_lost as u128,
+            congestion_event.end_of_round_trip as u128,
+            congestion_event.is_probing_for_bandwidth as u128,
+            max_bw,
+            min_rtt,
+            congestion_event.last_packet_send_state.is_valid as u128,
+            congestion_event.last_packet_send_state.is_app_limited as u128,
+            congestion_event.last_packet_send_state.total_bytes_sent as u128,
+            congestion_event.last_packet_send_state.total_bytes_acked as u128,
+            congestion_event.last_packet_send_state.total_bytes_lost as u128,
+            congestion_event.last_packet_send_state.bytes_in_flight as u128,
+        ];
+
+        let cycle_string: String;
+        // match self.cycle.phase {
+        //    CyclePhase::NotStarted => unreachable!(),
+        //    CyclePhase::Up => cycle_string = "UP".to_owned(),
+        //    CyclePhase::Down => cycle_string = "DOWN".to_owned(),
+        //    CyclePhase::Cruise => cycle_string = "CRUISE".to_owned(),
+        //    CyclePhase::Refill => cycle_string = "REFILL".to_owned(),
+        //}
+        // self.model.write_to_log(cycle_string, logging_values);
+
         if self.maybe_adapt_upper_bounds(
             target_bytes_inflight,
             congestion_event,
@@ -436,6 +500,53 @@ impl ProbeBW {
                     congestion_event.bytes_in_flight >= queuing_threshold;
             }
         }
+
+        let optional_max_bw = congestion_event.sample_max_bandwidth;
+        let mut max_bw = 0;
+        if !optional_max_bw.is_none() {
+            max_bw = optional_max_bw.unwrap().bits_per_second as u128;
+        }
+
+        let optional_min_rtt = congestion_event.sample_min_rtt;
+        let mut min_rtt = 0;
+        if !optional_min_rtt.is_none() {
+            min_rtt = optional_min_rtt.unwrap().as_millis();
+        }
+        let logging_values = vec![
+            is_risky as u128,
+            is_queuing as u128,
+            self.model.rounds_with_queueing() as u128,
+            self.model.min_bytes_in_flight_in_round() as u128,
+            self.model.cwnd_gain() as u128,
+            self.model.pacing_gain() as u128,
+            self.model.inflight_hi() as u128,
+            congestion_event.event_time.elapsed().as_millis() as u128,
+            congestion_event.prior_cwnd as u128,
+            congestion_event.prior_bytes_in_flight as u128,
+            congestion_event.bytes_in_flight as u128,
+            congestion_event.bytes_acked as u128,
+            congestion_event.bytes_lost as u128,
+            congestion_event.end_of_round_trip as u128,
+            congestion_event.is_probing_for_bandwidth as u128,
+            max_bw,
+            min_rtt,
+            congestion_event.last_packet_send_state.is_valid as u128,
+            congestion_event.last_packet_send_state.is_app_limited as u128,
+            congestion_event.last_packet_send_state.total_bytes_sent as u128,
+            congestion_event.last_packet_send_state.total_bytes_acked as u128,
+            congestion_event.last_packet_send_state.total_bytes_lost as u128,
+            congestion_event.last_packet_send_state.bytes_in_flight as u128,
+        ];
+
+        let cycle_string: String;
+        // match self.cycle.phase {
+        //    CyclePhase::NotStarted => unreachable!(),
+        //    CyclePhase::Up => cycle_string = "UP".to_owned(),
+        //    CyclePhase::Down => cycle_string = "DOWN".to_owned(),
+        //    CyclePhase::Cruise => cycle_string = "CRUISE".to_owned(),
+        //    CyclePhase::Refill => cycle_string = "REFILL".to_owned(),
+        //}
+        // self.model.write_to_log(cycle_string, logging_values);
 
         if is_risky || is_queuing {
             self.enter_probe_down(
@@ -653,6 +764,114 @@ mod tests {
     use super::*;
     use crate::recovery::gcongestion::bbr2::SendTimeState;
     use crate::recovery::gcongestion::bbr2::DEFAULT_PARAMS;
+    use crate::recovery::Bandwidth;
+
+    #[test]
+    fn plateau_normal_execution() {
+        // correct up behavior with concrete observed values
+        let last_packet_send_state_normal = SendTimeState {
+            is_valid: true,
+            is_app_limited: true,
+            total_bytes_sent: 12046680,
+            total_bytes_acked: 0, // 7147216,
+            total_bytes_lost: 0,
+            bytes_in_flight: 4897835,
+        };
+        let test_event_normal = BBRv2CongestionEvent {
+            event_time: Instant::now(),
+            prior_cwnd: 6829574 as usize, // should be way higher
+            prior_bytes_in_flight: 6829574 as usize, // should be way higher
+            bytes_in_flight: 6824174 as usize,
+            bytes_acked: 5400 as usize,
+            bytes_lost: 0,
+            end_of_round_trip: true,
+            is_probing_for_bandwidth: true,
+            sample_max_bandwidth: Some(Bandwidth::from_bytes_per_second(
+                20977504,
+            )),
+            sample_min_rtt: Some(Duration::from_millis(1867)), // about right
+            last_packet_send_state: last_packet_send_state_normal,
+        };
+
+        let params = &DEFAULT_PARAMS;
+        let model = BBRv2NetworkModel::new(
+            params,
+            Duration::from_millis(333),
+            "".to_owned(),
+        );
+
+        let cycle = Cycle::default();
+        let mut probe_bw = ProbeBW { model, cycle };
+        probe_bw
+            .model
+            .set_inflight_hi(1.84467440737096E+019 as usize);
+        probe_bw.raise_inflight_high_slope(6833832 as usize);
+        let bdp = probe_bw
+            .model
+            .bdp1(Bandwidth::from_bytes_per_second(20977504));
+        let target_bytes = bdp.min(6829574 as usize);
+
+        probe_bw.update_probe_up(
+            test_event_normal.prior_bytes_in_flight as usize,
+            target_bytes,
+            &test_event_normal,
+            params,
+        );
+        assert_eq!(probe_bw.cycle.probe_up_rounds, 1);
+        // Slope is increased at the end of round by decreasing probe_up_bytes.
+    }
+    #[test]
+    fn plateau_plateau_execution() {
+        let last_packet_send_state_plateau = SendTimeState {
+            is_valid: true,
+            is_app_limited: false, /* this should be true in practice, but in
+                                    * the test, both should be false */
+            total_bytes_sent: 586320,
+            total_bytes_acked: 0,//562668,
+            total_bytes_lost: 0,
+            bytes_in_flight: 21973,
+        };
+        SendTimeState::default();
+        let test_event_plateau = BBRv2CongestionEvent {
+            event_time: Instant::now(),
+            prior_cwnd: 21973 as usize, // should be way higher
+            prior_bytes_in_flight: 21973 as usize, // should be way higher
+            bytes_in_flight: 0,         // real: 0
+            bytes_acked: 21973 as usize,
+            bytes_lost: 0,
+            end_of_round_trip: true,
+            is_probing_for_bandwidth: true,
+            sample_max_bandwidth: Some(Bandwidth::from_bytes_per_second(174040)), /* should be way higher */
+            sample_min_rtt: Some(Duration::from_millis(1009)), // about right
+            last_packet_send_state: last_packet_send_state_plateau,
+        };
+
+        let params = &DEFAULT_PARAMS;
+        let model = BBRv2NetworkModel::new(
+            params,
+            Duration::from_millis(333),
+            "".to_owned(),
+        );
+        let cycle = Cycle::default();
+        let mut probe_bw = ProbeBW { model, cycle };
+        probe_bw
+            .model
+            .set_inflight_hi(1.84467440737096E+019 as usize);
+        probe_bw.raise_inflight_high_slope(21973 as usize);
+
+        let bdp = probe_bw
+            .model
+            .bdp1(Bandwidth::from_bytes_per_second(174040));
+        let target_bytes = bdp.min(21973 as usize);
+
+        probe_bw.update_probe_up(
+            test_event_plateau.prior_bytes_in_flight as usize,
+            target_bytes,
+            &test_event_plateau,
+            params,
+        );
+        assert_eq!(probe_bw.cycle.probe_up_rounds, 0);
+    }
 
     #[rstest]
     fn probe_upward(#[values(100, 10_000, 65_536, 300_000)] step: usize) {
@@ -692,7 +911,11 @@ mod tests {
         };
 
         let params = &DEFAULT_PARAMS;
-        let model = BBRv2NetworkModel::new(params, Duration::from_millis(333));
+        let model = BBRv2NetworkModel::new(
+            params,
+            Duration::from_millis(333),
+            "".to_owned(),
+        );
         let cycle = Cycle::default();
         let mut probe_bw = ProbeBW { model, cycle };
         probe_bw.model.set_inflight_hi(100_000);

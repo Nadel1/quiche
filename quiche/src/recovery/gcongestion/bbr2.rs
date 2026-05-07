@@ -511,21 +511,7 @@ impl BBRv2 {
         max_segment_size: usize, smoothed_rtt: Duration,
         custom_bbr_params: Option<&BbrParams>, logging_name: String,
     ) -> Self {
-        println!("-----using bbrv2!, logging_name: {:?}----", logging_name);
-        if logging_name != "" {
 
-            File::create(logging_name.clone()).unwrap();
-
-            use std::io::Write; // has to be included here, otherwise issues with other write calls
-            let mut file = File::options()
-                .append(true)
-                .open(logging_name.clone())
-                .unwrap();
-            let save_string = "TIMESTAMP,MODE,CWND,CWND_GAIN,MIN_RTT,MIN_RTT_TIME,\n";
-
-
-            let _ = file.write_all(save_string.as_bytes());
-        }
 
         let cwnd = initial_congestion_window * max_segment_size;
 
@@ -536,7 +522,7 @@ impl BBRv2 {
         };
 
         BBRv2 {
-            mode: Mode::startup(BBRv2NetworkModel::new(&params, smoothed_rtt)),
+            mode: Mode::startup(BBRv2NetworkModel::new(&params, smoothed_rtt,logging_name)),
             cwnd,
             pacing_rate: initial_pacing_rate(cwnd, smoothed_rtt, &params),
             cwnd_limits: Limits {
@@ -549,7 +535,7 @@ impl BBRv2 {
             last_quiescence_start: None,
             mss: max_segment_size,
             params,
-            logging_name: logging_name.clone(),
+            logging_name:"".to_owned(),
         }
     }
 
@@ -557,28 +543,7 @@ impl BBRv2 {
         self.params.time_sent_set_to_now
     }
 
-    pub fn write_to_log(&self, sent_from: String, logging_values: Vec<u128>) {
-        use std::io::Write;
-        if self.logging_name == "" {
-            return;
-        }
-        let mut file = File::options()
-            .append(true)
-            .open(self.logging_name.clone())
-            .unwrap();
-        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH);
-        let mut save_string = timestamp.unwrap().as_secs().to_string().to_owned();
-        save_string.push_str(",");
-        save_string.push_str(&sent_from);
-        
-        let vec_iter = logging_values.iter();
-        for val in vec_iter {
-            save_string.push_str(",");
-            save_string.push_str(&val.to_string());
-        }
-        save_string.push_str("\n");
-        let _ = file.write_all(save_string.as_bytes());
-    }
+
 
     fn on_exit_quiescence(&mut self, now: Instant) {
         if let Some(last_quiescence_start) = self.last_quiescence_start.take() {
@@ -729,8 +694,17 @@ impl CongestionControl for BBRv2 {
         if bytes_in_flight == 0 && self.params.avoid_unnecessary_probe_rtt {
             self.on_exit_quiescence(sent_time);
         }
-
         let network_model = self.mode.network_model_mut();
+        let logging_values = vec![
+        
+            self.cwnd as u128,
+            bytes_in_flight as u128,
+            network_model.cwnd_gain() as u128,
+            network_model.min_rtt().as_micros(),
+            network_model.min_rtt_timestamp().elapsed().as_micros() as u128,
+
+        ];
+        
         network_model.on_packet_sent(
             sent_time,
             bytes_in_flight,
@@ -739,15 +713,8 @@ impl CongestionControl for BBRv2 {
             is_retransmissible,
         );
 
-        let logging_values = vec![
         
-            self.cwnd as u128,
-            network_model.cwnd_gain() as u128,
-            network_model.min_rtt().as_micros(),
-            network_model.min_rtt_timestamp().elapsed().as_micros() as u128,
-
-        ];
-        self.write_to_log(self.mode.to_string(), logging_values);
+        //self.write_to_log(self.mode.to_string(), logging_values);
     }
 
     fn on_congestion_event(
@@ -807,32 +774,6 @@ impl CongestionControl for BBRv2 {
             log_sample_min_rtt=sample_min_rtt.unwrap().as_micros() as u128;
         }
         
-        //let logging_values = vec![
-        //
-        //    self.cwnd as u128,
-        //    network_model.cwnd_gain() as u128,
-        //    log_sample_min_rtt,
-//
-//
-        //    //self.pacing_rate.bits_per_second as u128,
-        //    //network_model.pacing_gain() as u128,
-        //    //congestion_event.bytes_in_flight as u128,
-        //    //prior_in_flight as u128,
-        //    //network_model.bandwidth_estimate().bits_per_second as u128,
-        //    //network_model.max_bytes_delivered_in_round() as u128,
-        //    //network_model.total_bytes_acked() as u128,
-        //    //rtt_stats.latest_rtt().as_micros() as u128,
-        //    //rtt_stats.max_rtt().unwrap().as_micros() as u128,
-////
-        //    //rtt_stats.min_rtt().unwrap().as_micros() as u128,
-////
-        //    //log_sample_min_rtt,
-        //    ////congestion_event.sample_min_rtt.unwrap().as_micros() as u128,
-        //    //congestion_event.event_time.elapsed().as_micros() as u128,
-        //    network_model.min_rtt_timestamp().elapsed().as_micros() as u128,
-//
-        //];
-        //self.write_to_log(self.mode.to_string(), logging_values);
         if congestion_event.bytes_in_flight == 0 &&
             self.params.avoid_unnecessary_probe_rtt
         {
@@ -938,7 +879,7 @@ mod tests {
             INIT_PACKET_SIZE,
             initial_rtt,
             Some(bbr_params),
-            "".as_string(),
+            "".to_string(),
         );
 
         assert_eq!(bbr2.cwnd_limits.lo, INIT_CWND);
