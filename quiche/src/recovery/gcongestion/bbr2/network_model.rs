@@ -214,7 +214,6 @@ impl BBRv2NetworkModel {
     pub(super) fn new(
         params: &Params, initial_rtt: Duration, logging_name: String,
     ) -> Self {
-        println!("-----using bbrv2!, logging_name: {:?}----", logging_name);
         if logging_name != "" {
             File::create(logging_name.clone()).unwrap();
 
@@ -223,7 +222,7 @@ impl BBRv2NetworkModel {
                 .append(true)
                 .open(logging_name.clone())
                 .unwrap();
-            let save_string = "TIMESTAMP,CYCLE,IS_RISKY,IS_QUEUEING,QUEUING_ROUNDS,MIN_BYTES_IN_FLIGHT,CWND_GAIN,PACING_GAIN,INFLIGHT_HI,EVENT_TIME,PRIOR_CWND,PRIOR_BYTES_IN_FLIGHT,BYTES_IN_FLIGHT,BYTES_ACKED,BYTES_LOST,END_OF_ROUNDTRIP,PROBING_FOR_BW,MAX_BW,MIN_RTT,SEND_STATE_VALID,SEND_STATE_APP_LIMITED,SEND_STATE_TOTAL_BYTES_SENT,SEND_STATE_TOTAL_BYTES_ACKED,SEND_STATE_BYTES_LOST,SEND_STATE_BYTES_IN_FLIGHT,\n";
+            let save_string = "TIMESTAMP,CYCLE,IS_RISKY,IS_QUEUEING,QUEUING_ROUNDS,MIN_BYTES_IN_FLIGHT,CWND_GAIN,PACING_GAIN,INFLIGHT_HI,EVENT_TIME,PRIOR_CWND,PRIOR_BYTES_IN_FLIGHT,BYTES_IN_FLIGHT,BYTES_ACKED,BYTES_LOST,END_OF_ROUNDTRIP,PROBING_FOR_BW,MAX_BW,MIN_RTT,SEND_STATE_VALID,SEND_STATE_APP_LIMITED,SEND_STATE_TOTAL_BYTES_SENT,SEND_STATE_TOTAL_BYTES_ACKED,SEND_STATE_BYTES_LOST,SEND_STATE_BYTES_IN_FLIGHT,IS_SAMPLE_FROM_PROBING,LOSS_EVENTS_IN_ROUND,\n";
 
             let _ = file.write_all(save_string.as_bytes());
         };
@@ -299,6 +298,9 @@ impl BBRv2NetworkModel {
         (bandwidth * gain).to_bytes_per_period(self.min_rtt()) as usize
     }
 
+    pub(super) fn set_total_acked_bytes(&mut self, total_bytes_acked:usize){
+        self.bandwidth_sampler.set_total_acked_bytes(total_bytes_acked);
+    }
     pub(super) fn bdp1(&self, bandwidth: Bandwidth) -> usize {
         self.bdp(bandwidth, 1.0)
     }
@@ -651,14 +653,17 @@ impl BBRv2NetworkModel {
         &self, congestion_event: &BBRv2CongestionEvent, max_loss_events: usize,
         params: &Params,
     ) -> bool {
+        println!("check inflight too high");
         let send_state = &congestion_event.last_packet_send_state;
 
         if !send_state.is_valid {
             // Not enough information.
+            println!("first condition");
             return false;
         }
 
         if self.loss_events_in_round < max_loss_events {
+            println!("second condition: {:?} < {:?}", self.loss_events_in_round, max_loss_events);
             return false;
         }
 
@@ -671,6 +676,7 @@ impl BBRv2NetworkModel {
             let lost_in_round_threshold =
                 (inflight_at_send as f32 * params.loss_threshold) as usize;
             if bytes_lost_in_round > lost_in_round_threshold {
+                println!("third condition");
                 return true;
             }
         }

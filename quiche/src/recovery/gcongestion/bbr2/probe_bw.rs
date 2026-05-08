@@ -439,9 +439,11 @@ impl ProbeBW {
             congestion_event.last_packet_send_state.total_bytes_acked as u128,
             congestion_event.last_packet_send_state.total_bytes_lost as u128,
             congestion_event.last_packet_send_state.bytes_in_flight as u128,
+            self.cycle.is_sample_from_probing as u128,
+            self.model.loss_events_in_round() as u128,
         ];
 
-        let cycle_string: String;
+        //let cycle_string: String;
         // match self.cycle.phase {
         //    CyclePhase::NotStarted => unreachable!(),
         //    CyclePhase::Up => cycle_string = "UP".to_owned(),
@@ -536,9 +538,11 @@ impl ProbeBW {
             congestion_event.last_packet_send_state.total_bytes_acked as u128,
             congestion_event.last_packet_send_state.total_bytes_lost as u128,
             congestion_event.last_packet_send_state.bytes_in_flight as u128,
+            self.cycle.is_sample_from_probing as u128,
+            self.model.loss_events_in_round() as u128,
         ];
 
-        let cycle_string: String;
+        //let cycle_string: String;
         // match self.cycle.phase {
         //    CyclePhase::NotStarted => unreachable!(),
         //    CyclePhase::Up => cycle_string = "UP".to_owned(),
@@ -585,9 +589,11 @@ impl ProbeBW {
         &mut self, target_bytes_inflight: usize,
         congestion_event: &BBRv2CongestionEvent, params: &Params,
     ) -> AdaptUpperBoundsResult {
+        println!("in maybe_adapt_upper_bounds");
         let send_state = congestion_event.last_packet_send_state;
 
         if !send_state.is_valid {
+            println!("early return");
             return AdaptUpperBoundsResult::NotAdaptedInvalidSample;
         }
 
@@ -597,13 +603,14 @@ impl ProbeBW {
             inflight_at_send = self.model.total_bytes_acked() -
                 congestion_event.last_packet_send_state.total_bytes_acked;
         }
-
+        println!("is sample from probing: {:?}", self.cycle.is_sample_from_probing);
         if self.cycle.is_sample_from_probing {
             if self.model.is_inflight_too_high(
                 congestion_event,
                 params.probe_bw_full_loss_count,
                 params,
             ) {
+                println!("first if check passed");
                 self.cycle.is_sample_from_probing = false;
                 if !send_state.is_app_limited ||
                     params.max_probe_up_queue_rounds > 0
@@ -621,7 +628,7 @@ impl ProbeBW {
                             .max_bytes_delivered_in_round()
                             .max(new_inflight_hi);
                     }
-
+                    println!("setting inflight hi from maybe_adapt_upper_bounds 1");
                     self.model.set_inflight_hi(new_inflight_hi);
                 }
                 return AdaptUpperBoundsResult::AdaptedProbedTooHigh;
@@ -635,6 +642,7 @@ impl ProbeBW {
 
         // Raise the upper bound for inflight.
         if inflight_at_send > self.model.inflight_hi() {
+            println!("setting inflight hi from maybe_adapt_upper_bounds 2");
             self.model.set_inflight_hi(inflight_at_send);
         }
 
@@ -726,6 +734,7 @@ impl ProbeBW {
             self.cycle.probe_up_acked += congestion_event.bytes_acked;
         }
 
+
         if let Some(probe_up_bytes) = self.cycle.probe_up_bytes {
             if self.cycle.probe_up_acked >= probe_up_bytes {
                 let delta = self.cycle.probe_up_acked / probe_up_bytes;
@@ -736,6 +745,7 @@ impl ProbeBW {
                 let new_inflight_hi =
                     self.model.inflight_hi() + delta * DEFAULT_MSS;
                 if new_inflight_hi > self.model.inflight_hi() {
+                    println!("setting inflight hi from probe_inflight_high_upward 1");
                     self.model.set_inflight_hi(new_inflight_hi);
                 }
             }
@@ -773,8 +783,8 @@ mod tests {
             is_valid: true,
             is_app_limited: true,
             total_bytes_sent: 12046680,
-            total_bytes_acked: 0, // 7147216,
-            total_bytes_lost: 0,
+            total_bytes_acked: 7147216,
+            total_bytes_lost: 4270825,
             bytes_in_flight: 4897835,
         };
         let test_event_normal = BBRv2CongestionEvent {
@@ -794,18 +804,19 @@ mod tests {
         };
 
         let params = &DEFAULT_PARAMS;
-        let model = BBRv2NetworkModel::new(
+        let mut model = BBRv2NetworkModel::new(
             params,
             Duration::from_millis(333),
             "".to_owned(),
         );
+        
+        model.set_total_acked_bytes(7147216);// necessary, as otherwise we have an overflow
 
         let cycle = Cycle::default();
         let mut probe_bw = ProbeBW { model, cycle };
-        probe_bw
-            .model
-            .set_inflight_hi(1.84467440737096E+019 as usize);
-        probe_bw.raise_inflight_high_slope(6833832 as usize);
+        //setting this to true should force us to update the inflight_hi
+        probe_bw.cycle.is_sample_from_probing=true;
+        //probe_bw.model.set_inflight_hi(4738476 as usize); --> this should happen in update_probe_up
         let bdp = probe_bw
             .model
             .bdp1(Bandwidth::from_bytes_per_second(20977504));
@@ -817,6 +828,7 @@ mod tests {
             &test_event_normal,
             params,
         );
+
         assert_eq!(probe_bw.cycle.probe_up_rounds, 1);
         // Slope is increased at the end of round by decreasing probe_up_bytes.
     }
@@ -827,7 +839,7 @@ mod tests {
             is_app_limited: false, /* this should be true in practice, but in
                                     * the test, both should be false */
             total_bytes_sent: 586320,
-            total_bytes_acked: 0,//562668,
+            total_bytes_acked: 562668,
             total_bytes_lost: 0,
             bytes_in_flight: 21973,
         };
@@ -847,28 +859,45 @@ mod tests {
         };
 
         let params = &DEFAULT_PARAMS;
-        let model = BBRv2NetworkModel::new(
+        let mut model = BBRv2NetworkModel::new(
             params,
             Duration::from_millis(333),
             "".to_owned(),
         );
+        model.set_total_acked_bytes(562668);
         let cycle = Cycle::default();
         let mut probe_bw = ProbeBW { model, cycle };
+        probe_bw.cycle.is_sample_from_probing=true;
+
+        // this is simply the initial maximum value --> thus we return early in
+        // probe_inflight_high_upward (which is called in update_probe_up), which
+        // is why the round counter is not increased (would be at the end of the
+        // function)
+        // this controls the upper limit of how the recent rounds and _should_ be
+        // updated once per round
         probe_bw
             .model
             .set_inflight_hi(1.84467440737096E+019 as usize);
-        probe_bw.raise_inflight_high_slope(21973 as usize);
+
+        assert_eq!(probe_bw.cycle.probe_up_rounds, 0);
 
         let bdp = probe_bw
             .model
             .bdp1(Bandwidth::from_bytes_per_second(174040));
         let target_bytes = bdp.min(21973 as usize);
 
+        // main method; this calls probe_inflight_high_upward, which returns too
+        // early due to the maximum inflight_hi
         probe_bw.update_probe_up(
             test_event_plateau.prior_bytes_in_flight as usize,
             target_bytes,
             &test_event_plateau,
             params,
+        );
+        // check that returns us too early
+        assert_eq!(
+            test_event_plateau.prior_cwnd < probe_bw.model.inflight_hi(),
+            true
         );
         assert_eq!(probe_bw.cycle.probe_up_rounds, 0);
     }

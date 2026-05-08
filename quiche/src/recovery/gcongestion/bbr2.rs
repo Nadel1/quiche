@@ -571,7 +571,6 @@ impl BBRv2 {
     }
 
     fn update_pacing_rate(&mut self, bytes_acked: usize) {
-        println!("updating pacing rate");
         let network_model = self.mode.network_model();
         let bandwidth_estimate = match network_model.bandwidth_estimate() {
             e if e == Bandwidth::zero() => return,
@@ -624,7 +623,6 @@ impl BBRv2 {
     }
 
     fn update_congestion_window(&mut self, bytes_acked: usize) {
-        println!("update cwnd");
         let network_model = self.mode.network_model();
         let mut target_cwnd =
             self.get_target_congestion_window(network_model.cwnd_gain());

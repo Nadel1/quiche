@@ -517,6 +517,10 @@ impl BandwidthSampler {
         }
     }
 
+    pub(crate) fn set_total_acked_bytes(&mut self, total_bytes_acked: usize) {
+        self.total_bytes_acked = total_bytes_acked;
+    }
+
     #[allow(dead_code)]
     pub(crate) fn is_app_limited(&self) -> bool {
         self.is_app_limited
