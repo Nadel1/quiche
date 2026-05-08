@@ -521,6 +521,10 @@ impl BandwidthSampler {
         self.total_bytes_acked = total_bytes_acked;
     }
 
+    pub(crate) fn get_total_acked_bytes(&self)->usize{
+        self.total_bytes_acked
+    }
+
     #[allow(dead_code)]
     pub(crate) fn is_app_limited(&self) -> bool {
         self.is_app_limited

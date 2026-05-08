@@ -35,6 +35,7 @@ use std::time::Instant;
 use crate::recovery::gcongestion::bbr2::Params;
 use crate::recovery::gcongestion::Acked;
 use crate::recovery::gcongestion::Lost;
+use crate::recovery::Bandwidth;
 use crate::recovery::RecoveryStats;
 
 use super::mode::Cycle;
@@ -308,6 +309,46 @@ impl ProbeBW {
         &mut self, target_bytes_inflight: usize,
         congestion_event: &BBRv2CongestionEvent, params: &Params,
     ) {
+        let logging_values = vec![
+            self.model.rounds_with_queueing() as u128,
+            self.model.min_bytes_in_flight_in_round() as u128,
+            self.model.cwnd_gain() as u128,
+            self.model.pacing_gain() as u128,
+            self.model.inflight_hi() as u128,
+            congestion_event.event_time.elapsed().as_millis() as u128,
+            congestion_event.prior_cwnd as u128,
+            congestion_event.prior_bytes_in_flight as u128,
+            congestion_event.bytes_in_flight as u128,
+            congestion_event.bytes_acked as u128,
+            congestion_event.bytes_lost as u128,
+            congestion_event.end_of_round_trip as u128,
+            congestion_event.is_probing_for_bandwidth as u128,
+            congestion_event
+                .sample_max_bandwidth
+                .unwrap_or(Bandwidth { bits_per_second: 0 })
+                .bits_per_second as u128,
+            congestion_event
+                .sample_min_rtt
+                .unwrap_or(Duration::from_millis(0))
+                .as_millis(),
+            congestion_event.last_packet_send_state.is_valid as u128,
+            congestion_event.last_packet_send_state.is_app_limited as u128,
+            congestion_event.last_packet_send_state.total_bytes_sent as u128,
+            congestion_event.last_packet_send_state.total_bytes_acked as u128,
+            congestion_event.last_packet_send_state.total_bytes_lost as u128,
+            congestion_event.last_packet_send_state.bytes_in_flight as u128,
+            self.cycle.is_sample_from_probing as u128,
+            self.model.loss_events_in_round() as u128,
+            self.model.get_total_acked_bytes() as u128,
+            self.model
+                .bandwidth_lo
+                .unwrap_or(Bandwidth::infinite())
+                .bits_per_second as u128,
+            self.model.round_trip_count() as u128,
+        ];
+
+        self.model.write_to_log("DOWN".to_owned(), logging_values);
+
         if self.cycle.rounds_in_phase == 1 && congestion_event.end_of_round_trip {
             self.cycle.is_sample_from_probing = false;
 
@@ -367,6 +408,46 @@ impl ProbeBW {
         &mut self, target_bytes_inflight: usize,
         congestion_event: &BBRv2CongestionEvent, params: &Params,
     ) {
+        let logging_values = vec![
+            self.model.rounds_with_queueing() as u128,
+            self.model.min_bytes_in_flight_in_round() as u128,
+            self.model.cwnd_gain() as u128,
+            self.model.pacing_gain() as u128,
+            self.model.inflight_hi() as u128,
+            congestion_event.event_time.elapsed().as_millis() as u128,
+            congestion_event.prior_cwnd as u128,
+            congestion_event.prior_bytes_in_flight as u128,
+            congestion_event.bytes_in_flight as u128,
+            congestion_event.bytes_acked as u128,
+            congestion_event.bytes_lost as u128,
+            congestion_event.end_of_round_trip as u128,
+            congestion_event.is_probing_for_bandwidth as u128,
+            congestion_event
+                .sample_max_bandwidth
+                .unwrap_or(Bandwidth { bits_per_second: 0 })
+                .bits_per_second as u128,
+            congestion_event
+                .sample_min_rtt
+                .unwrap_or(Duration::from_millis(0))
+                .as_millis(),
+            congestion_event.last_packet_send_state.is_valid as u128,
+            congestion_event.last_packet_send_state.is_app_limited as u128,
+            congestion_event.last_packet_send_state.total_bytes_sent as u128,
+            congestion_event.last_packet_send_state.total_bytes_acked as u128,
+            congestion_event.last_packet_send_state.total_bytes_lost as u128,
+            congestion_event.last_packet_send_state.bytes_in_flight as u128,
+            self.cycle.is_sample_from_probing as u128,
+            self.model.loss_events_in_round() as u128,
+            self.model.get_total_acked_bytes() as u128,
+            self.model
+                .bandwidth_lo
+                .unwrap_or(Bandwidth::infinite())
+                .bits_per_second as u128,
+            self.model.round_trip_count() as u128,
+        ];
+
+        self.model.write_to_log("CRUISE".to_owned(), logging_values);
+
         self.maybe_adapt_upper_bounds(
             target_bytes_inflight,
             congestion_event,
@@ -386,6 +467,46 @@ impl ProbeBW {
         &mut self, target_bytes_inflight: usize,
         congestion_event: &BBRv2CongestionEvent, params: &Params,
     ) {
+        let logging_values = vec![
+            self.model.rounds_with_queueing() as u128,
+            self.model.min_bytes_in_flight_in_round() as u128,
+            self.model.cwnd_gain() as u128,
+            self.model.pacing_gain() as u128,
+            self.model.inflight_hi() as u128,
+            congestion_event.event_time.elapsed().as_millis() as u128,
+            congestion_event.prior_cwnd as u128,
+            congestion_event.prior_bytes_in_flight as u128,
+            congestion_event.bytes_in_flight as u128,
+            congestion_event.bytes_acked as u128,
+            congestion_event.bytes_lost as u128,
+            congestion_event.end_of_round_trip as u128,
+            congestion_event.is_probing_for_bandwidth as u128,
+            congestion_event
+                .sample_max_bandwidth
+                .unwrap_or(Bandwidth { bits_per_second: 0 })
+                .bits_per_second as u128,
+            congestion_event
+                .sample_min_rtt
+                .unwrap_or(Duration::from_millis(0))
+                .as_millis(),
+            congestion_event.last_packet_send_state.is_valid as u128,
+            congestion_event.last_packet_send_state.is_app_limited as u128,
+            congestion_event.last_packet_send_state.total_bytes_sent as u128,
+            congestion_event.last_packet_send_state.total_bytes_acked as u128,
+            congestion_event.last_packet_send_state.total_bytes_lost as u128,
+            congestion_event.last_packet_send_state.bytes_in_flight as u128,
+            self.cycle.is_sample_from_probing as u128,
+            self.model.loss_events_in_round() as u128,
+            self.model.get_total_acked_bytes() as u128,
+            self.model
+                .bandwidth_lo
+                .unwrap_or(Bandwidth::infinite())
+                .bits_per_second as u128,
+            self.model.round_trip_count() as u128,
+        ];
+
+        self.model.write_to_log("REFILL".to_owned(), logging_values);
+
         self.maybe_adapt_upper_bounds(
             target_bytes_inflight,
             congestion_event,
@@ -404,55 +525,6 @@ impl ProbeBW {
         &mut self, prior_in_flight: usize, target_bytes_inflight: usize,
         congestion_event: &BBRv2CongestionEvent, params: &Params,
     ) {
-        let optional_max_bw = congestion_event.sample_max_bandwidth;
-        let mut max_bw = 0;
-        if !optional_max_bw.is_none() {
-            max_bw = optional_max_bw.unwrap().bits_per_second as u128;
-        }
-
-        let optional_min_rtt = congestion_event.sample_min_rtt;
-        let mut min_rtt = 0;
-        if !optional_min_rtt.is_none() {
-            min_rtt = optional_min_rtt.unwrap().as_millis();
-        }
-        let logging_values = vec![
-            false as u128,
-            false as u128,
-            self.model.rounds_with_queueing() as u128,
-            self.model.min_bytes_in_flight_in_round() as u128,
-            self.model.cwnd_gain() as u128,
-            self.model.pacing_gain() as u128,
-            self.model.inflight_hi() as u128,
-            congestion_event.event_time.elapsed().as_millis() as u128,
-            congestion_event.prior_cwnd as u128,
-            congestion_event.prior_bytes_in_flight as u128,
-            congestion_event.bytes_in_flight as u128,
-            congestion_event.bytes_acked as u128,
-            congestion_event.bytes_lost as u128,
-            congestion_event.end_of_round_trip as u128,
-            congestion_event.is_probing_for_bandwidth as u128,
-            max_bw,
-            min_rtt,
-            congestion_event.last_packet_send_state.is_valid as u128,
-            congestion_event.last_packet_send_state.is_app_limited as u128,
-            congestion_event.last_packet_send_state.total_bytes_sent as u128,
-            congestion_event.last_packet_send_state.total_bytes_acked as u128,
-            congestion_event.last_packet_send_state.total_bytes_lost as u128,
-            congestion_event.last_packet_send_state.bytes_in_flight as u128,
-            self.cycle.is_sample_from_probing as u128,
-            self.model.loss_events_in_round() as u128,
-        ];
-
-        //let cycle_string: String;
-        // match self.cycle.phase {
-        //    CyclePhase::NotStarted => unreachable!(),
-        //    CyclePhase::Up => cycle_string = "UP".to_owned(),
-        //    CyclePhase::Down => cycle_string = "DOWN".to_owned(),
-        //    CyclePhase::Cruise => cycle_string = "CRUISE".to_owned(),
-        //    CyclePhase::Refill => cycle_string = "REFILL".to_owned(),
-        //}
-        // self.model.write_to_log(cycle_string, logging_values);
-
         if self.maybe_adapt_upper_bounds(
             target_bytes_inflight,
             congestion_event,
@@ -503,20 +575,8 @@ impl ProbeBW {
             }
         }
 
-        let optional_max_bw = congestion_event.sample_max_bandwidth;
-        let mut max_bw = 0;
-        if !optional_max_bw.is_none() {
-            max_bw = optional_max_bw.unwrap().bits_per_second as u128;
-        }
 
-        let optional_min_rtt = congestion_event.sample_min_rtt;
-        let mut min_rtt = 0;
-        if !optional_min_rtt.is_none() {
-            min_rtt = optional_min_rtt.unwrap().as_millis();
-        }
         let logging_values = vec![
-            is_risky as u128,
-            is_queuing as u128,
             self.model.rounds_with_queueing() as u128,
             self.model.min_bytes_in_flight_in_round() as u128,
             self.model.cwnd_gain() as u128,
@@ -530,8 +590,14 @@ impl ProbeBW {
             congestion_event.bytes_lost as u128,
             congestion_event.end_of_round_trip as u128,
             congestion_event.is_probing_for_bandwidth as u128,
-            max_bw,
-            min_rtt,
+            congestion_event
+                .sample_max_bandwidth
+                .unwrap_or(Bandwidth { bits_per_second: 0 })
+                .bits_per_second as u128,
+            congestion_event
+                .sample_min_rtt
+                .unwrap_or(Duration::from_millis(0))
+                .as_millis(),
             congestion_event.last_packet_send_state.is_valid as u128,
             congestion_event.last_packet_send_state.is_app_limited as u128,
             congestion_event.last_packet_send_state.total_bytes_sent as u128,
@@ -540,17 +606,15 @@ impl ProbeBW {
             congestion_event.last_packet_send_state.bytes_in_flight as u128,
             self.cycle.is_sample_from_probing as u128,
             self.model.loss_events_in_round() as u128,
+            self.model.get_total_acked_bytes() as u128,
+            self.model
+                .bandwidth_lo
+                .unwrap_or(Bandwidth::infinite())
+                .bits_per_second as u128,
+            self.model.round_trip_count() as u128,
         ];
 
-        //let cycle_string: String;
-        // match self.cycle.phase {
-        //    CyclePhase::NotStarted => unreachable!(),
-        //    CyclePhase::Up => cycle_string = "UP".to_owned(),
-        //    CyclePhase::Down => cycle_string = "DOWN".to_owned(),
-        //    CyclePhase::Cruise => cycle_string = "CRUISE".to_owned(),
-        //    CyclePhase::Refill => cycle_string = "REFILL".to_owned(),
-        //}
-        // self.model.write_to_log(cycle_string, logging_values);
+        self.model.write_to_log("UP".to_owned(), logging_values);
 
         if is_risky || is_queuing {
             self.enter_probe_down(
@@ -603,7 +667,10 @@ impl ProbeBW {
             inflight_at_send = self.model.total_bytes_acked() -
                 congestion_event.last_packet_send_state.total_bytes_acked;
         }
-        println!("is sample from probing: {:?}", self.cycle.is_sample_from_probing);
+        println!(
+            "is sample from probing: {:?}",
+            self.cycle.is_sample_from_probing
+        );
         if self.cycle.is_sample_from_probing {
             if self.model.is_inflight_too_high(
                 congestion_event,
@@ -628,7 +695,9 @@ impl ProbeBW {
                             .max_bytes_delivered_in_round()
                             .max(new_inflight_hi);
                     }
-                    println!("setting inflight hi from maybe_adapt_upper_bounds 1");
+                    println!(
+                        "setting inflight hi from maybe_adapt_upper_bounds 1"
+                    );
                     self.model.set_inflight_hi(new_inflight_hi);
                 }
                 return AdaptUpperBoundsResult::AdaptedProbedTooHigh;
@@ -734,7 +803,6 @@ impl ProbeBW {
             self.cycle.probe_up_acked += congestion_event.bytes_acked;
         }
 
-
         if let Some(probe_up_bytes) = self.cycle.probe_up_bytes {
             if self.cycle.probe_up_acked >= probe_up_bytes {
                 let delta = self.cycle.probe_up_acked / probe_up_bytes;
@@ -745,7 +813,9 @@ impl ProbeBW {
                 let new_inflight_hi =
                     self.model.inflight_hi() + delta * DEFAULT_MSS;
                 if new_inflight_hi > self.model.inflight_hi() {
-                    println!("setting inflight hi from probe_inflight_high_upward 1");
+                    println!(
+                        "setting inflight hi from probe_inflight_high_upward 1"
+                    );
                     self.model.set_inflight_hi(new_inflight_hi);
                 }
             }
@@ -809,14 +879,15 @@ mod tests {
             Duration::from_millis(333),
             "".to_owned(),
         );
-        
-        model.set_total_acked_bytes(7147216);// necessary, as otherwise we have an overflow
+
+        model.set_total_acked_bytes(7147216); // necessary, as otherwise we have an overflow
 
         let cycle = Cycle::default();
         let mut probe_bw = ProbeBW { model, cycle };
-        //setting this to true should force us to update the inflight_hi
-        probe_bw.cycle.is_sample_from_probing=true;
-        //probe_bw.model.set_inflight_hi(4738476 as usize); --> this should happen in update_probe_up
+        // setting this to true should force us to update the inflight_hi
+        probe_bw.cycle.is_sample_from_probing = true;
+        // probe_bw.model.set_inflight_hi(4738476 as usize); --> this should
+        // happen in update_probe_up
         let bdp = probe_bw
             .model
             .bdp1(Bandwidth::from_bytes_per_second(20977504));
@@ -832,6 +903,7 @@ mod tests {
         assert_eq!(probe_bw.cycle.probe_up_rounds, 1);
         // Slope is increased at the end of round by decreasing probe_up_bytes.
     }
+
     #[test]
     fn plateau_plateau_execution() {
         let last_packet_send_state_plateau = SendTimeState {
@@ -843,7 +915,6 @@ mod tests {
             total_bytes_lost: 0,
             bytes_in_flight: 21973,
         };
-        SendTimeState::default();
         let test_event_plateau = BBRv2CongestionEvent {
             event_time: Instant::now(),
             prior_cwnd: 21973 as usize, // should be way higher
@@ -867,7 +938,7 @@ mod tests {
         model.set_total_acked_bytes(562668);
         let cycle = Cycle::default();
         let mut probe_bw = ProbeBW { model, cycle };
-        probe_bw.cycle.is_sample_from_probing=true;
+        probe_bw.cycle.is_sample_from_probing = true;
 
         // this is simply the initial maximum value --> thus we return early in
         // probe_inflight_high_upward (which is called in update_probe_up), which
@@ -902,6 +973,92 @@ mod tests {
         assert_eq!(probe_bw.cycle.probe_up_rounds, 0);
     }
 
+    #[test]
+    fn set_inflight_hi_correct() {
+        // data obtained experimentally
+        let is_risky = false;
+        let is_queuing = false;
+        let model_rounds_with_queueing = 0;
+        let model_min_bytes_in_flight_in_round = 7047620;
+        let model_cwnd_gain = 2;
+        let model_pacing_gain = 1;
+        let model_inflight_hi = usize::MAX; // should be then set to 7535548
+        let congestion_event_event_time_milis = 0;
+        let congestion_event_prior_cwnd = 9501470;
+        let congestion_event_prior_bytes_in_flight = 7058420;
+        let congestion_event_bytes_in_flight = 7047620;
+        let congestion_event_bytes_acked = 1350;
+        let congestion_event_bytes_lost = 9450;
+        let congestion_event_end_of_round_trip = false;
+        let congestion_event_probing_for_bw = true;
+        let max_bw = 21482635;
+        let min_rtt = 2749;
+        let send_state_is_valid = true;
+        let send_state_is_app_limited = true; // will be false in the next step
+        let send_state_total_bytes_sent = 191059942;
+        let send_state_total_bytes_acked = 180688585;
+        let send_state_total_bytes_lost = 906470;
+        let send_state_bytes_in_flight = 9463260;
+        let cycle_is_sample_from_probing = true;
+        let model_loss_events_in_round = 10; // will be reset to 0 afterwards
+
+        let model_inflight_hi_correct = 7535548;
+
+        let last_packet_send_state = SendTimeState {
+            is_valid: send_state_is_valid,
+            is_app_limited: send_state_is_app_limited,
+            total_bytes_sent: send_state_total_bytes_sent,
+            total_bytes_acked: send_state_total_bytes_acked,
+            total_bytes_lost: send_state_total_bytes_lost,
+            bytes_in_flight: send_state_bytes_in_flight,
+        };
+        let congestion_event = BBRv2CongestionEvent {
+            event_time: Instant::now(),
+            prior_cwnd: congestion_event_prior_cwnd as usize,
+            prior_bytes_in_flight: congestion_event_prior_bytes_in_flight
+                as usize,
+            bytes_in_flight: congestion_event_bytes_in_flight,
+            bytes_acked: congestion_event_bytes_acked as usize,
+            bytes_lost: congestion_event_bytes_lost,
+            end_of_round_trip: congestion_event_end_of_round_trip,
+            is_probing_for_bandwidth: congestion_event_probing_for_bw,
+            sample_max_bandwidth: Some(Bandwidth::from_bytes_per_second(max_bw)),
+            sample_min_rtt: Some(Duration::from_millis(min_rtt)),
+            last_packet_send_state,
+        };
+
+        let params = &DEFAULT_PARAMS;
+        let mut model = BBRv2NetworkModel::new(
+            params,
+            Duration::from_millis(333),
+            "".to_owned(),
+        );
+        model.set_total_acked_bytes(562668); // update to avoid overflow
+        model.set_loss_events_in_round(model_loss_events_in_round);
+        model.set_inflight_hi(model_inflight_hi);
+        let cycle = Cycle::default();
+        let mut probe_bw = ProbeBW { model, cycle };
+        probe_bw.cycle.is_sample_from_probing = cycle_is_sample_from_probing;
+
+        let bdp = probe_bw
+            .model
+            .bdp1(Bandwidth::from_bytes_per_second(174040));
+        let target_bytes = bdp.min(21973 as usize);
+
+        // main method; this calls probe_inflight_high_upward, which returns too
+        // early due to the maximum inflight_hi
+        probe_bw.update_probe_up(
+            congestion_event.prior_bytes_in_flight as usize,
+            target_bytes,
+            &congestion_event,
+            params,
+        );
+        // check that returns us too early
+        assert_eq!(
+            test_event_plateau.prior_cwnd < probe_bw.model.inflight_hi(),
+            true
+        );
+    }
     #[rstest]
     fn probe_upward(#[values(100, 10_000, 65_536, 300_000)] step: usize) {
         let test_event =

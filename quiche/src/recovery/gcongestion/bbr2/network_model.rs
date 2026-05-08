@@ -175,7 +175,7 @@ pub(super) struct BBRv2NetworkModel {
     /// Max bandwidth in the current round. Updated once per congestion event.
     bandwidth_latest: Bandwidth,
     /// Max bandwidth of recent rounds. Updated once per round.
-    bandwidth_lo: Option<Bandwidth>,
+    pub(crate) bandwidth_lo: Option<Bandwidth>,
     prior_bandwidth_lo: Option<Bandwidth>,
 
     /// Max inflight in the current round. Updated once per congestion event.
@@ -222,7 +222,7 @@ impl BBRv2NetworkModel {
                 .append(true)
                 .open(logging_name.clone())
                 .unwrap();
-            let save_string = "TIMESTAMP,CYCLE,IS_RISKY,IS_QUEUEING,QUEUING_ROUNDS,MIN_BYTES_IN_FLIGHT,CWND_GAIN,PACING_GAIN,INFLIGHT_HI,EVENT_TIME,PRIOR_CWND,PRIOR_BYTES_IN_FLIGHT,BYTES_IN_FLIGHT,BYTES_ACKED,BYTES_LOST,END_OF_ROUNDTRIP,PROBING_FOR_BW,MAX_BW,MIN_RTT,SEND_STATE_VALID,SEND_STATE_APP_LIMITED,SEND_STATE_TOTAL_BYTES_SENT,SEND_STATE_TOTAL_BYTES_ACKED,SEND_STATE_BYTES_LOST,SEND_STATE_BYTES_IN_FLIGHT,IS_SAMPLE_FROM_PROBING,LOSS_EVENTS_IN_ROUND,\n";
+            let save_string = "TIMESTAMP,CYCLE,QUEUING_ROUNDS,MIN_BYTES_IN_FLIGHT,CWND_GAIN,PACING_GAIN,INFLIGHT_HI,EVENT_TIME,PRIOR_CWND,PRIOR_BYTES_IN_FLIGHT,BYTES_IN_FLIGHT,BYTES_ACKED,BYTES_LOST,END_OF_ROUNDTRIP,PROBING_FOR_BW,MAX_BW,MIN_RTT,SEND_STATE_VALID,SEND_STATE_APP_LIMITED,SEND_STATE_TOTAL_BYTES_SENT,SEND_STATE_TOTAL_BYTES_ACKED,SEND_STATE_BYTES_LOST,SEND_STATE_BYTES_IN_FLIGHT,IS_SAMPLE_FROM_PROBING,LOSS_EVENTS_IN_ROUND,BANDWIDTH_LO,MODEL_ROUND_TRIP\n";
 
             let _ = file.write_all(save_string.as_bytes());
         };
@@ -298,9 +298,15 @@ impl BBRv2NetworkModel {
         (bandwidth * gain).to_bytes_per_period(self.min_rtt()) as usize
     }
 
-    pub(super) fn set_total_acked_bytes(&mut self, total_bytes_acked:usize){
-        self.bandwidth_sampler.set_total_acked_bytes(total_bytes_acked);
+    pub(super) fn set_total_acked_bytes(&mut self, total_bytes_acked: usize) {
+        self.bandwidth_sampler
+            .set_total_acked_bytes(total_bytes_acked);
     }
+
+    pub(super) fn get_total_acked_bytes(&self) -> usize {
+        self.bandwidth_sampler.get_total_acked_bytes()
+    }
+
     pub(super) fn bdp1(&self, bandwidth: Bandwidth) -> usize {
         self.bdp(bandwidth, 1.0)
     }
@@ -663,7 +669,10 @@ impl BBRv2NetworkModel {
         }
 
         if self.loss_events_in_round < max_loss_events {
-            println!("second condition: {:?} < {:?}", self.loss_events_in_round, max_loss_events);
+            println!(
+                "second condition: {:?} < {:?}",
+                self.loss_events_in_round, max_loss_events
+            );
             return false;
         }
 
@@ -768,7 +777,7 @@ impl BBRv2NetworkModel {
         self.bandwidth_sampler.total_bytes_lost()
     }
 
-    fn round_trip_count(&self) -> usize {
+    pub(super) fn round_trip_count(&self) -> usize {
         self.round_trip_counter.round_trip_count
     }
 
@@ -849,6 +858,9 @@ impl BBRv2NetworkModel {
         self.loss_events_in_round
     }
 
+    pub(super) fn set_loss_events_in_round(&mut self, loss_events:usize){
+        self.loss_events_in_round=loss_events;
+    }
     pub(super) fn rounds_with_queueing(&self) -> usize {
         self.rounds_with_queueing
     }
