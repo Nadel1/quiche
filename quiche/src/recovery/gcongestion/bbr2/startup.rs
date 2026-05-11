@@ -105,6 +105,7 @@ impl ModeImpl for Startup {
             self.model.round_trip_count() as u128,
         ];
 
+
         self.model.write_to_log("STARTUP".to_owned(), logging_values);
         if self.model.full_bandwidth_reached() {
             return self.into_drain(event_time, Some(congestion_event), params);

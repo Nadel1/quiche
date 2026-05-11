@@ -1055,7 +1055,7 @@ mod tests {
         );
         // check that returns us too early
         assert_eq!(
-            test_event_plateau.prior_cwnd < probe_bw.model.inflight_hi(),
+            congestion_event.prior_cwnd < probe_bw.model.inflight_hi(),
             true
         );
     }

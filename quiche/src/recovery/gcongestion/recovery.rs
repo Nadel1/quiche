@@ -176,6 +176,7 @@ impl RecoveryEpoch {
         skip_pn: Option<u64>, trace_id: &str,
     ) -> Result<AckedDetectionResult> {
         newly_acked.clear();
+        println!("skip_pn: {:?}", skip_pn);
         let mut acked_bytes = 0;
         let mut spurious_losses = 0;
         let mut spurious_pkt_thresh = None;
@@ -187,6 +188,8 @@ impl RecoveryEpoch {
             .unwrap_or(0)
             .max(largest_ack_received);
 
+        println!("peer_sent_ack_ranges: {:?}", peer_sent_ack_ranges);
+        println!("sent packets: {:?}", self.sent_packets);
         for peer_sent_range in peer_sent_ack_ranges.iter() {
             if skip_pn.is_some_and(|skip_pn| peer_sent_range.contains(&skip_pn)) {
                 // https://www.rfc-editor.org/rfc/rfc9000#section-13.1
@@ -971,7 +974,7 @@ impl RecoveryOps for GRecovery {
         }
 
         let prior_in_flight = self.bytes_in_flight.get();
-
+        println!("epoch:  {:?}", epoch);
         let AckedDetectionResult {
             acked_bytes,
             spurious_losses,
@@ -1448,6 +1451,9 @@ impl std::fmt::Debug for GRecovery {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::packet::Epoch;
+    use crate::ranges;
+    use crate::recovery::gcongestion::recovery;
     use crate::Config;
 
     #[test]
@@ -1506,6 +1512,80 @@ mod tests {
         assert_eq!(loss_thresh.time_thresh(), PACKET_REORDER_TIME_THRESHOLD);
     }
 
+    #[test]
+    fn detect_remove_acked_packets_correct() {
+        let mut ranges = RangeSet::default();
+        let smallest_ack = 0;
+        let largest_ack = 2;
+        let mut newly_acked = Vec::<Acked>::new();
+        ranges.insert(smallest_ack..largest_ack + 1);
+        let mut epochs: [RecoveryEpoch; Epoch::count()] = Default::default();
+        let epoch = Epoch::Application;
+        let trace_id = "0";
+        const MAX_DATAGRAM_SIZE: usize = 1350;
+        let config = Config::new(1).unwrap();
+        let mut recovery_config = recovery::RecoveryConfig::from_config(&config);
+        recovery_config.cc_algorithm =
+            CongestionControlAlgorithm::Bbr2Gcongestion;
+        let mut recovery = GRecovery::new(&recovery_config).unwrap();
+        let mut sent_packets: VecDeque<SentPacket> = [
+            SentPacket {
+                pkt_num: 0,
+                status: SentStatus::Acked,
+            },
+            SentPacket {
+                pkt_num: 1,
+                status: SentStatus::Acked,
+            },
+            SentPacket {
+                pkt_num: 2,
+                status: SentStatus::Sent {
+                    sent_bytes: 42,
+                    time_sent: Instant::now(),
+                    ack_eliciting: true,
+                    in_flight: true,
+                    has_data: true,
+                    is_pmtud_probe: false,
+                    frames: SmallVec::new(),
+                },
+            },
+        ]
+        .into();
+
+        recovery.epochs = epochs;
+
+        let epoch = &mut recovery.epochs[epoch];
+        epoch.sent_packets.push_back(SentPacket {  pkt_num: 0,
+                status: SentStatus::Acked});
+        epoch.sent_packets.push_back(SentPacket {  pkt_num: 1,
+                status: SentStatus::Acked});
+        
+        epoch.sent_packets.push_back(SentPacket {  pkt_num: 2,
+                status: SentStatus::Sent {
+                    sent_bytes: 42,
+                    time_sent: Instant::now(),
+                    ack_eliciting: true,
+                    in_flight: true,
+                    has_data: true,
+                    is_pmtud_probe: false,
+                    frames: SmallVec::new(),
+                }});
+        epoch.pkts_in_flight=3;
+        let AckedDetectionResult {
+            acked_bytes,
+            spurious_losses,
+            spurious_pkt_thresh,
+            has_ack_eliciting,
+        } = epoch
+            .detect_and_remove_acked_packets(
+                &ranges,
+                &mut newly_acked,
+                None,
+                trace_id,
+            )
+            .unwrap();
+        assert_eq!(acked_bytes, 42);
+    }
     #[test]
     fn relaxed_loss_threshold() {
         // The max time threshold when operating in relaxed loss mode.

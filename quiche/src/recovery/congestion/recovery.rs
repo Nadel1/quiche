@@ -135,7 +135,7 @@ impl RecoveryEpoch {
             .largest_acked_packet
             .unwrap_or(0)
             .max(largest_ack_received);
-
+        
         for peer_sent_range in peer_sent_ack_ranges.iter() {
             if skip_pn.is_some_and(|skip_pn| peer_sent_range.contains(&skip_pn)) {
                 // https://www.rfc-editor.org/rfc/rfc9000#section-13.1
