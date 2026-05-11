@@ -222,9 +222,7 @@ impl BBRv2NetworkModel {
                 .append(true)
                 .open(logging_name.clone())
                 .unwrap();
-            let save_string = "TIMESTAMP,CYCLE,QUEUING_ROUNDS,MIN_BYTES_IN_FLIGHT,CWND_GAIN,PACING_GAIN,INFLIGHT_HI,EVENT_TIME,PRIOR_CWND,PRIOR_BYTES_IN_FLIGHT,BYTES_IN_FLIGHT,BYTES_ACKED,BYTES_LOST,END_OF_ROUNDTRIP,PROBING_FOR_BW,MAX_BW,MIN_RTT,SEND_STATE_VALID,SEND_STATE_APP_LIMITED,SEND_STATE_TOTAL_BYTES_SENT,SEND_STATE_TOTAL_BYTES_ACKED,SEND_STATE_BYTES_LOST,SEND_STATE_BYTES_IN_FLIGHT,IS_SAMPLE_FROM_PROBING,LOSS_EVENTS_IN_ROUND,BANDWIDTH_LO,MODEL_ROUND_TRIP\n";
-
-            let _ = file.write_all(save_string.as_bytes());
+            
         };
         BBRv2NetworkModel {
             min_bytes_in_flight_in_round: usize::MAX,

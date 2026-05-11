@@ -347,7 +347,7 @@ impl ProbeBW {
             self.model.round_trip_count() as u128,
         ];
 
-        self.model.write_to_log("DOWN".to_owned(), logging_values);
+        //self.model.write_to_log("DOWN".to_owned(), logging_values);
 
         if self.cycle.rounds_in_phase == 1 && congestion_event.end_of_round_trip {
             self.cycle.is_sample_from_probing = false;
@@ -446,7 +446,7 @@ impl ProbeBW {
             self.model.round_trip_count() as u128,
         ];
 
-        self.model.write_to_log("CRUISE".to_owned(), logging_values);
+        //self.model.write_to_log("CRUISE".to_owned(), logging_values);
 
         self.maybe_adapt_upper_bounds(
             target_bytes_inflight,
@@ -505,7 +505,7 @@ impl ProbeBW {
             self.model.round_trip_count() as u128,
         ];
 
-        self.model.write_to_log("REFILL".to_owned(), logging_values);
+        //self.model.write_to_log("REFILL".to_owned(), logging_values);
 
         self.maybe_adapt_upper_bounds(
             target_bytes_inflight,
@@ -614,7 +614,7 @@ impl ProbeBW {
             self.model.round_trip_count() as u128,
         ];
 
-        self.model.write_to_log("UP".to_owned(), logging_values);
+        //self.model.write_to_log("UP".to_owned(), logging_values);
 
         if is_risky || is_queuing {
             self.enter_probe_down(

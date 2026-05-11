@@ -1,4 +1,5 @@
 use crate::packet;
+use crate::recovery;
 use crate::recovery::resume::CrState;
 use crate::recovery::OnLossDetectionTimeoutOutcome;
 use crate::recovery::INITIAL_TIME_THRESHOLD_OVERHEAD;
@@ -60,6 +61,33 @@ const SAVED_CC_FILE: &str = "saved_params.csv";
 struct SentPacket {
     pkt_num: u64,
     status: SentStatus,
+}
+
+impl std::fmt::Display for SentPacket {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match &self.status {
+            SentStatus::Sent {
+                time_sent,
+                in_flight,
+                sent_bytes,
+                frames,
+                ack_eliciting,
+                ..
+            } => {
+                f.write_fmt(format_args!(
+                    "pkt_num:{0} status: Sent in_flight: {in_flight} sent_bytes: {sent_bytes} frame_len: {} ack_eliciting: {ack_eliciting}", frames.len()))
+            },
+            SentStatus::Acked => f.write_fmt(format_args!(
+                "pkt_num:{0} status: Acked",
+                self.pkt_num
+            )),
+            SentStatus::Lost => f.write_fmt(format_args!(
+                "pkt_num:{0} status: Lost",
+                self.pkt_num
+            )),
+        };
+        Ok(())
+    }
 }
 
 #[derive(Debug)]
@@ -170,6 +198,10 @@ impl RecoveryEpoch {
         unacked_bytes
     }
 
+    fn get_sent_packets(self) -> VecDeque<SentPacket>{
+        self.sent_packets
+    }
+
     // `peer_sent_ack_ranges` should not be used without validation.
     fn detect_and_remove_acked_packets(
         &mut self, peer_sent_ack_ranges: &RangeSet, newly_acked: &mut Vec<Acked>,
@@ -190,6 +222,7 @@ impl RecoveryEpoch {
 
         println!("peer_sent_ack_ranges: {:?}", peer_sent_ack_ranges);
         println!("sent packets: {:?}", self.sent_packets);
+        println!("packets in flight: {:?}", self.pkts_in_flight);
         for peer_sent_range in peer_sent_ack_ranges.iter() {
             if skip_pn.is_some_and(|skip_pn| peer_sent_range.contains(&skip_pn)) {
                 // https://www.rfc-editor.org/rfc/rfc9000#section-13.1
@@ -482,6 +515,7 @@ pub struct GRecovery {
 
     pacer: Pacer,
     pub(crate) resume: resume::Resume,
+    logging_name: String,
 }
 
 impl GRecovery {
@@ -507,7 +541,17 @@ impl GRecovery {
             ),
             _ => return None,
         };
+        if recovery_config.logging_name != "" {
+            File::create(recovery_config.logging_name.clone()).unwrap();
 
+            use std::io::Write; // has to be included here, otherwise issue with other write calls
+            let mut file = File::options()
+                .append(true)
+                .open(recovery_config.logging_name.clone())
+                .unwrap();
+            let save_string = "TIMESTAMP,\n";
+            let _ = file.write_all(save_string.as_bytes());
+        }
         Some(Self {
             epochs: Default::default(),
             rtt_stats: RttStats::new(
@@ -548,6 +592,7 @@ impl GRecovery {
             newly_acked: Vec::new(),
             lost_reuse: Vec::new(),
             resume: resume::Resume::new(SAVED_CC_FILE),
+            logging_name: recovery_config.logging_name.clone().to_owned(),
         })
     }
 
@@ -710,6 +755,54 @@ impl GRecovery {
 
     fn is_app_limited(&self) -> bool {
         self.pacer.get_app_limited()
+    }
+
+    fn write_to_log(&self, sent_from: String, logging_values: Vec<u128>) {
+        use std::io::Write;
+        if self.logging_name == "" {
+            return;
+        }
+        let mut file = File::options()
+            .append(true)
+            .open(self.logging_name.clone())
+            .unwrap();
+        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH);
+        let mut save_string = timestamp.unwrap().as_secs().to_string().to_owned();
+        save_string.push_str(",");
+        save_string.push_str(&sent_from);
+
+        let vec_iter = logging_values.iter();
+        for val in vec_iter {
+            save_string.push_str(",");
+            save_string.push_str(&val.to_string());
+        }
+        save_string.push_str("\n");
+        let _ = file.write_all(save_string.as_bytes());
+    }
+
+    fn write_to_log_vec(
+        &self, sent_from: String, logging_values: &VecDeque<SentPacket>,
+    ) {
+        use std::io::Write;
+        if self.logging_name == "" {
+            return;
+        }
+        let mut file = File::options()
+            .append(true)
+            .open(self.logging_name.clone())
+            .unwrap();
+        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH);
+        let mut save_string = timestamp.unwrap().as_secs().to_string().to_owned();
+        save_string.push_str(",");
+        save_string.push_str(&sent_from);
+
+        let vec_iter = logging_values.iter();
+        for val in vec_iter {
+            save_string.push_str(",");
+            save_string.push_str(&val.to_string());
+        }
+        save_string.push_str("\n");
+        let _ = file.write_all(save_string.as_bytes());
     }
 }
 
@@ -975,6 +1068,7 @@ impl RecoveryOps for GRecovery {
 
         let prior_in_flight = self.bytes_in_flight.get();
         println!("epoch:  {:?}", epoch);
+
         let AckedDetectionResult {
             acked_bytes,
             spurious_losses,
@@ -986,7 +1080,13 @@ impl RecoveryOps for GRecovery {
             skip_pn,
             trace_id,
         )?;
-
+        let logging_values = vec![acked_bytes as u128, has_ack_eliciting as u128];
+        self.write_to_log("ON_ACK_RECEIVED".to_owned(), logging_values);
+        let sent_packets=&self.epochs[epoch].get_sent_packets();
+        self.write_to_log_vec(
+            "ON_ACK_RECEIVED".to_owned(),
+            sent_packets,
+        );
         self.lost_spurious_count += spurious_losses;
         if let Some(thresh) = spurious_pkt_thresh {
             self.loss_thresh.on_spurious_loss(thresh);
@@ -1555,22 +1655,28 @@ mod tests {
         recovery.epochs = epochs;
 
         let epoch = &mut recovery.epochs[epoch];
-        epoch.sent_packets.push_back(SentPacket {  pkt_num: 0,
-                status: SentStatus::Acked});
-        epoch.sent_packets.push_back(SentPacket {  pkt_num: 1,
-                status: SentStatus::Acked});
-        
-        epoch.sent_packets.push_back(SentPacket {  pkt_num: 2,
-                status: SentStatus::Sent {
-                    sent_bytes: 42,
-                    time_sent: Instant::now(),
-                    ack_eliciting: true,
-                    in_flight: true,
-                    has_data: true,
-                    is_pmtud_probe: false,
-                    frames: SmallVec::new(),
-                }});
-        epoch.pkts_in_flight=3;
+        epoch.sent_packets.push_back(SentPacket {
+            pkt_num: 0,
+            status: SentStatus::Acked,
+        });
+        epoch.sent_packets.push_back(SentPacket {
+            pkt_num: 1,
+            status: SentStatus::Acked,
+        });
+
+        epoch.sent_packets.push_back(SentPacket {
+            pkt_num: 2,
+            status: SentStatus::Sent {
+                sent_bytes: 42,
+                time_sent: Instant::now(),
+                ack_eliciting: true,
+                in_flight: true,
+                has_data: true,
+                is_pmtud_probe: false,
+                frames: SmallVec::new(),
+            },
+        });
+        epoch.pkts_in_flight = 3;
         let AckedDetectionResult {
             acked_bytes,
             spurious_losses,
