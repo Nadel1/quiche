@@ -65,7 +65,7 @@ struct SentPacket {
 
 impl std::fmt::Display for SentPacket {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match &self.status {
+        let _ = match &self.status {
             SentStatus::Sent {
                 time_sent,
                 in_flight,
@@ -75,14 +75,14 @@ impl std::fmt::Display for SentPacket {
                 ..
             } => {
                 f.write_fmt(format_args!(
-                    "pkt_num:{0} status: Sent in_flight: {in_flight} sent_bytes: {sent_bytes} frame_len: {} ack_eliciting: {ack_eliciting}", frames.len()))
+                    "pkt_num:{} / status: Sent in_flight: {in_flight} / sent_bytes: {sent_bytes} / frame_len: {} / ack_eliciting: {ack_eliciting}",self.pkt_num, frames.len()))
             },
             SentStatus::Acked => f.write_fmt(format_args!(
-                "pkt_num:{0} status: Acked",
+                "pkt_num:{} / status: Acked",
                 self.pkt_num
             )),
             SentStatus::Lost => f.write_fmt(format_args!(
-                "pkt_num:{0} status: Lost",
+                "pkt_num:{} / status: Lost",
                 self.pkt_num
             )),
         };
@@ -198,17 +198,12 @@ impl RecoveryEpoch {
         unacked_bytes
     }
 
-    fn get_sent_packets(self) -> VecDeque<SentPacket>{
-        self.sent_packets
-    }
-
     // `peer_sent_ack_ranges` should not be used without validation.
     fn detect_and_remove_acked_packets(
         &mut self, peer_sent_ack_ranges: &RangeSet, newly_acked: &mut Vec<Acked>,
         skip_pn: Option<u64>, trace_id: &str,
     ) -> Result<AckedDetectionResult> {
         newly_acked.clear();
-        println!("skip_pn: {:?}", skip_pn);
         let mut acked_bytes = 0;
         let mut spurious_losses = 0;
         let mut spurious_pkt_thresh = None;
@@ -220,9 +215,7 @@ impl RecoveryEpoch {
             .unwrap_or(0)
             .max(largest_ack_received);
 
-        println!("peer_sent_ack_ranges: {:?}", peer_sent_ack_ranges);
-        println!("sent packets: {:?}", self.sent_packets);
-        println!("packets in flight: {:?}", self.pkts_in_flight);
+
         for peer_sent_range in peer_sent_ack_ranges.iter() {
             if skip_pn.is_some_and(|skip_pn| peer_sent_range.contains(&skip_pn)) {
                 // https://www.rfc-editor.org/rfc/rfc9000#section-13.1
@@ -516,6 +509,7 @@ pub struct GRecovery {
     pacer: Pacer,
     pub(crate) resume: resume::Resume,
     logging_name: String,
+    logged_rows:i64,
 }
 
 impl GRecovery {
@@ -593,6 +587,7 @@ impl GRecovery {
             lost_reuse: Vec::new(),
             resume: resume::Resume::new(SAVED_CC_FILE),
             logging_name: recovery_config.logging_name.clone().to_owned(),
+            logged_rows:0,
         })
     }
 
@@ -757,10 +752,10 @@ impl GRecovery {
         self.pacer.get_app_limited()
     }
 
-    fn write_to_log(&self, sent_from: String, logging_values: Vec<u128>) {
+    fn write_to_log(&mut self, sent_from: String, logging_values: Vec<String>,mut logged_rows:i64) ->i64{
         use std::io::Write;
         if self.logging_name == "" {
-            return;
+            return 0;
         }
         let mut file = File::options()
             .append(true)
@@ -774,18 +769,24 @@ impl GRecovery {
         let vec_iter = logging_values.iter();
         for val in vec_iter {
             save_string.push_str(",");
-            save_string.push_str(&val.to_string());
+            save_string.push_str(&val);
         }
         save_string.push_str("\n");
-        let _ = file.write_all(save_string.as_bytes());
+        if logged_rows<20{
+
+            let _ = file.write_all(save_string.as_bytes());
+            logged_rows+=1;
+
+        }
+        logged_rows
     }
 
     fn write_to_log_vec(
-        &self, sent_from: String, logging_values: &VecDeque<SentPacket>,
-    ) {
+        &self, sent_from: String, logging_values: &VecDeque<SentPacket>,mut logged_rows:i64
+    ){
         use std::io::Write;
         if self.logging_name == "" {
-            return;
+            return ;
         }
         let mut file = File::options()
             .append(true)
@@ -802,7 +803,12 @@ impl GRecovery {
             save_string.push_str(&val.to_string());
         }
         save_string.push_str("\n");
-        let _ = file.write_all(save_string.as_bytes());
+
+        if logged_rows<10{
+
+            let _ = file.write_all(save_string.as_bytes());
+        }
+
     }
 }
 
@@ -1041,11 +1047,6 @@ impl RecoveryOps for GRecovery {
         if self.resume.enabled() {
             let bytes_acked = self.resume.total_acked;
             let iw_acked = bytes_acked >= self.pacer.get_initial_cwnd();
-            println!(
-                "in ack received, bytes acked: {:?}, iw: {:?}",
-                bytes_acked,
-                self.pacer.get_initial_cwnd()
-            );
             for packet in self.newly_acked.iter() {
                 let largest_sent_pkt = self.epochs[epoch]
                     .sent_packets
@@ -1067,8 +1068,8 @@ impl RecoveryOps for GRecovery {
         }
 
         let prior_in_flight = self.bytes_in_flight.get();
-        println!("epoch:  {:?}", epoch);
-
+        let sent_packets = &self.epochs[epoch].sent_packets;
+        self.write_to_log_vec("ON_ACK_RECEIVED".to_owned(), &sent_packets,self.logged_rows);
         let AckedDetectionResult {
             acked_bytes,
             spurious_losses,
@@ -1080,13 +1081,24 @@ impl RecoveryOps for GRecovery {
             skip_pn,
             trace_id,
         )?;
-        let logging_values = vec![acked_bytes as u128, has_ack_eliciting as u128];
-        self.write_to_log("ON_ACK_RECEIVED".to_owned(), logging_values);
-        let sent_packets=&self.epochs[epoch].get_sent_packets();
-        self.write_to_log_vec(
-            "ON_ACK_RECEIVED".to_owned(),
-            sent_packets,
-        );
+        let skip_pn_unwrapped = skip_pn.unwrap_or(0);
+
+        let range: Vec<u64> = peer_sent_ack_ranges.flatten().collect();
+        let logging_values = vec![
+            format!("acked_bytes: {acked_bytes}"),
+            format!("skip_pn: {skip_pn_unwrapped}"),
+             format!("prior_in_flight: {prior_in_flight}"),
+            format!("new_bytes_in_flight:{:?}", self.bytes_in_flight.bytes_in_flight-acked_bytes),
+            format!("trace_id: {trace_id}"),
+            format!("peer_sent_ack_ranges: {:?}: {:?}",range.first().unwrap(), range.last().unwrap()),
+            format!("ack_delay: {ack_delay}"),
+            format!("handshake_status_completed :{:?}/ handshake_status_has_keys: {:?}/ handshake_status_peer_verified_address: {:?}",handshake_status.completed, handshake_status.has_handshake_keys, handshake_status.peer_verified_address),
+           
+
+        ];
+        self.logged_rows=self.write_to_log("ON_ACK_RECEIVED".to_owned(), logging_values,self.logged_rows);
+        _=self.write_to_log("ON_ACK_RECEIVED".to_owned(), vec!["".to_owned()],self.logged_rows);
+
         self.lost_spurious_count += spurious_losses;
         if let Some(thresh) = spurious_pkt_thresh {
             self.loss_thresh.on_spurious_loss(thresh);

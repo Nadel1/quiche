@@ -37,7 +37,7 @@ use std::time::Instant;
 #[derive(Default)]
 pub struct BytesInFlight {
     // Current bytes in flight.
-    bytes_in_flight: usize,
+    pub bytes_in_flight: usize,
 
     // Instant at which bytes_in_flight transitioned from 0 to >0.
     // Set if bytes_in_flight is currently >0 which indicates that

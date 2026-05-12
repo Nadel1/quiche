@@ -44,6 +44,7 @@ pub enum RangeSet {
     BTree(BTreeRangeSet),
 }
 
+
 /// A [`RangeSet`] variant backed by a [`SmallVec`] that is capable of storing
 /// [`MAX_INLINE_CAPACITY`] of ranges without allocation
 #[derive(Clone, PartialEq, Eq, PartialOrd)]
