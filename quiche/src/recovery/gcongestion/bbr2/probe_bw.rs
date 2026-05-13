@@ -110,23 +110,6 @@ impl ModeImpl for ProbeBW {
 
         let mut switch_to_probe_rtt = false;
 
-        // let logging_values = vec![
-        //    cwnd as u128,
-        //    self.model.cwnd_gain() as u128,
-        //    self.model.pacing_gain() as u128,
-        //    congestion_event.end_of_round_trip as u128,
-        //
-        //];
-        // let cycle_string:String;
-        // match self.cycle.phase {
-        //    CyclePhase::NotStarted => unreachable!(),
-        //    CyclePhase::Up => cycle_string="UP".to_owned(),
-        //    CyclePhase::Down => cycle_string="DOWN".to_owned(),
-        //    CyclePhase::Cruise => cycle_string="CRUISE".to_owned(),
-        //    CyclePhase::Refill => cycle_string="REFILL".to_owned(),
-        //}
-        // self.model.write_to_log(cycle_string, logging_values);
-
         match self.cycle.phase {
             CyclePhase::NotStarted => unreachable!(),
             CyclePhase::Up => self.update_probe_up(
@@ -204,7 +187,7 @@ impl ModeImpl for ProbeBW {
     fn on_exit_quiescence(
         mut self, now: Instant, quiescence_start_time: Instant, _params: &Params,
     ) -> Mode {
-        println!("On exit quiescence; afterwards postone_min_rtt with force update is called with parameter: {:?}",(now - quiescence_start_time).as_micros());
+        println!("postponing_min_rtt_timestamp to {:?}", now - quiescence_start_time);
         self.model
             .postpone_min_rtt_timestamp(now - quiescence_start_time);
         Mode::ProbeBW(self)
@@ -347,8 +330,6 @@ impl ProbeBW {
             self.model.round_trip_count() as u128,
         ];
 
-        //self.model.write_to_log("DOWN".to_owned(), logging_values);
-
         if self.cycle.rounds_in_phase == 1 && congestion_event.end_of_round_trip {
             self.cycle.is_sample_from_probing = false;
 
@@ -446,8 +427,6 @@ impl ProbeBW {
             self.model.round_trip_count() as u128,
         ];
 
-        //self.model.write_to_log("CRUISE".to_owned(), logging_values);
-
         self.maybe_adapt_upper_bounds(
             target_bytes_inflight,
             congestion_event,
@@ -504,8 +483,6 @@ impl ProbeBW {
                 .bits_per_second as u128,
             self.model.round_trip_count() as u128,
         ];
-
-        //self.model.write_to_log("REFILL".to_owned(), logging_values);
 
         self.maybe_adapt_upper_bounds(
             target_bytes_inflight,
@@ -576,45 +553,6 @@ impl ProbeBW {
         }
 
 
-        let logging_values = vec![
-            self.model.rounds_with_queueing() as u128,
-            self.model.min_bytes_in_flight_in_round() as u128,
-            self.model.cwnd_gain() as u128,
-            self.model.pacing_gain() as u128,
-            self.model.inflight_hi() as u128,
-            congestion_event.event_time.elapsed().as_millis() as u128,
-            congestion_event.prior_cwnd as u128,
-            congestion_event.prior_bytes_in_flight as u128,
-            congestion_event.bytes_in_flight as u128,
-            congestion_event.bytes_acked as u128,
-            congestion_event.bytes_lost as u128,
-            congestion_event.end_of_round_trip as u128,
-            congestion_event.is_probing_for_bandwidth as u128,
-            congestion_event
-                .sample_max_bandwidth
-                .unwrap_or(Bandwidth { bits_per_second: 0 })
-                .bits_per_second as u128,
-            congestion_event
-                .sample_min_rtt
-                .unwrap_or(Duration::from_millis(0))
-                .as_millis(),
-            congestion_event.last_packet_send_state.is_valid as u128,
-            congestion_event.last_packet_send_state.is_app_limited as u128,
-            congestion_event.last_packet_send_state.total_bytes_sent as u128,
-            congestion_event.last_packet_send_state.total_bytes_acked as u128,
-            congestion_event.last_packet_send_state.total_bytes_lost as u128,
-            congestion_event.last_packet_send_state.bytes_in_flight as u128,
-            self.cycle.is_sample_from_probing as u128,
-            self.model.loss_events_in_round() as u128,
-            self.model.get_total_acked_bytes() as u128,
-            self.model
-                .bandwidth_lo
-                .unwrap_or(Bandwidth::infinite())
-                .bits_per_second as u128,
-            self.model.round_trip_count() as u128,
-        ];
-
-        //self.model.write_to_log("UP".to_owned(), logging_values);
 
         if is_risky || is_queuing {
             self.enter_probe_down(

@@ -106,8 +106,6 @@ impl ModeImpl for Startup {
         ];
 
 
-
-        //self.model.write_to_log("STARTUP".to_owned(), logging_values);
         if self.model.full_bandwidth_reached() {
             return self.into_drain(event_time, Some(congestion_event), params);
         }

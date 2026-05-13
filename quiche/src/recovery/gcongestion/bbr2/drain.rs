@@ -105,7 +105,6 @@ impl ModeImpl for Drain {
             self.model.round_trip_count() as u128,
         ];
 
-        //self.model.write_to_log("DRAIN".to_owned(), logging_values);
         self.model.set_pacing_gain(params.drain_pacing_gain);
         // Only STARTUP can transition to DRAIN, both of them use the same cwnd
         // gain.

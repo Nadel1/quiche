@@ -208,6 +208,7 @@ pub(super) struct BBRv2NetworkModel {
     /// The most recent ack rate from the BandwidthSampler.
     latest_ack_rate: Option<Bandwidth>,
     logging_name: String,
+    logged_rows: i64,
 }
 
 impl BBRv2NetworkModel {
@@ -222,8 +223,10 @@ impl BBRv2NetworkModel {
                 .append(true)
                 .open(logging_name.clone())
                 .unwrap();
-            
-        };
+
+            let save_string = "TIMESTAMP,\n";
+            let _ = file.write_all(save_string.as_bytes());
+        }
         BBRv2NetworkModel {
             min_bytes_in_flight_in_round: usize::MAX,
             inflight_hi_limited_in_round: false,
@@ -268,6 +271,7 @@ impl BBRv2NetworkModel {
             latest_send_rate: None,
             latest_ack_rate: None,
             logging_name,
+            logged_rows: 0,
         }
     }
 
@@ -329,10 +333,43 @@ impl BBRv2NetworkModel {
         self.min_bytes_in_flight_in_round
     }
 
+    fn write_to_log(
+        &mut self, logging_values: Vec<String>, mut logged_rows: i64,
+    ) -> i64 {
+        use std::io::Write;
+        if self.logging_name == "" {
+            return 0;
+        }
+        let mut file = File::options()
+            .append(true)
+            .open(self.logging_name.clone())
+            .unwrap();
+        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH);
+        let mut save_string = timestamp.unwrap().as_secs().to_string().to_owned();
+        let vec_iter = logging_values.iter();
+        for val in vec_iter {
+            save_string.push_str(",");
+            save_string.push_str(&val);
+        }
+        save_string.push_str("\n");
+
+        let _ = file.write_all(save_string.as_bytes());
+        logged_rows += 1;
+
+        logged_rows
+    }
+
     pub(super) fn on_packet_sent(
         &mut self, sent_time: Instant, bytes_in_flight: usize,
         packet_number: u64, bytes: usize, is_retransmissible: bool,
     ) {
+        let logging_values = vec![
+            format!("sent_time [ms]: {:?}", sent_time.elapsed().as_millis()),
+            format!("bytes_in_flight: {bytes_in_flight}"),
+            format!("packet_number: {packet_number}"),
+            format!("bytes: {bytes}"),
+        ];
+        // self.logged_rows = self.write_to_log(logging_values, self.logged_rows);
         // Updating the min here ensures a more realistic (0) value when flows
         // exit quiescence.
         self.min_bytes_in_flight_in_round =
@@ -609,29 +646,6 @@ impl BBRv2NetworkModel {
             .remove_obsolete_packets(least_unacked_packet);
     }
 
-    pub fn write_to_log(&self, sent_from: String, logging_values: Vec<u128>) {
-        use std::io::Write;
-        if self.logging_name == "" {
-            return;
-        }
-        let mut file = File::options()
-            .append(true)
-            .open(self.logging_name.clone())
-            .unwrap();
-        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH);
-        let mut save_string = timestamp.unwrap().as_secs().to_string().to_owned();
-        save_string.push_str(",");
-        save_string.push_str(&sent_from);
-
-        let vec_iter = logging_values.iter();
-        for val in vec_iter {
-            save_string.push_str(",");
-            save_string.push_str(&val.to_string());
-        }
-        save_string.push_str("\n");
-        let _ = file.write_all(save_string.as_bytes());
-    }
-
     pub(super) fn maybe_expire_min_rtt(
         &mut self, congestion_event: &BBRv2CongestionEvent, params: &Params,
     ) -> bool {
@@ -844,6 +858,14 @@ impl BBRv2NetworkModel {
     }
 
     pub(super) fn postpone_min_rtt_timestamp(&mut self, duration: Duration) {
+        let logging_values = vec![
+            format!(
+                "postponing_min_rtt_time_stamp to: {:?}",
+                self.min_rtt_timestamp().add(duration).elapsed().as_millis()
+            ),
+            format!("adding: {:?}", duration.as_millis()),
+        ];
+        self.logged_rows = self.write_to_log(logging_values, self.logged_rows);
         self.min_rtt_filter
             .force_update(self.min_rtt(), self.min_rtt_timestamp().add(duration));
     }
@@ -856,9 +878,10 @@ impl BBRv2NetworkModel {
         self.loss_events_in_round
     }
 
-    pub(super) fn set_loss_events_in_round(&mut self, loss_events:usize){
-        self.loss_events_in_round=loss_events;
+    pub(super) fn set_loss_events_in_round(&mut self, loss_events: usize) {
+        self.loss_events_in_round = loss_events;
     }
+
     pub(super) fn rounds_with_queueing(&self) -> usize {
         self.rounds_with_queueing
     }

@@ -208,13 +208,12 @@ impl RecoveryEpoch {
         let mut spurious_losses = 0;
         let mut spurious_pkt_thresh = None;
         let mut has_ack_eliciting = false;
-
+        println!("{:?}", peer_sent_ack_ranges);
         let largest_ack_received = peer_sent_ack_ranges.last().unwrap();
         let largest_acked = self
             .largest_acked_packet
             .unwrap_or(0)
             .max(largest_ack_received);
-
 
         for peer_sent_range in peer_sent_ack_ranges.iter() {
             if skip_pn.is_some_and(|skip_pn| peer_sent_range.contains(&skip_pn)) {
@@ -509,7 +508,7 @@ pub struct GRecovery {
     pacer: Pacer,
     pub(crate) resume: resume::Resume,
     logging_name: String,
-    logged_rows:i64,
+    logged_rows: i64,
 }
 
 impl GRecovery {
@@ -587,7 +586,7 @@ impl GRecovery {
             lost_reuse: Vec::new(),
             resume: resume::Resume::new(SAVED_CC_FILE),
             logging_name: recovery_config.logging_name.clone().to_owned(),
-            logged_rows:0,
+            logged_rows: 0,
         })
     }
 
@@ -752,7 +751,10 @@ impl GRecovery {
         self.pacer.get_app_limited()
     }
 
-    fn write_to_log(&mut self, sent_from: String, logging_values: Vec<String>,mut logged_rows:i64) ->i64{
+    fn write_to_log(
+        &mut self, sent_from: String, logging_values: Vec<String>,
+        mut logged_rows: i64,
+    ) -> i64 {
         use std::io::Write;
         if self.logging_name == "" {
             return 0;
@@ -772,21 +774,20 @@ impl GRecovery {
             save_string.push_str(&val);
         }
         save_string.push_str("\n");
-        if logged_rows<20{
 
-            let _ = file.write_all(save_string.as_bytes());
-            logged_rows+=1;
+        let _ = file.write_all(save_string.as_bytes());
+        logged_rows += 1;
 
-        }
         logged_rows
     }
 
     fn write_to_log_vec(
-        &self, sent_from: String, logging_values: &VecDeque<SentPacket>,mut logged_rows:i64
-    ){
+        &self, sent_from: String, logging_values: &VecDeque<SentPacket>,
+        mut logged_rows: i64,
+    ) {
         use std::io::Write;
         if self.logging_name == "" {
-            return ;
+            return;
         }
         let mut file = File::options()
             .append(true)
@@ -804,11 +805,9 @@ impl GRecovery {
         }
         save_string.push_str("\n");
 
-        if logged_rows<10{
-
+        if logged_rows < 10 {
             let _ = file.write_all(save_string.as_bytes());
         }
-
     }
 }
 
@@ -1069,7 +1068,6 @@ impl RecoveryOps for GRecovery {
 
         let prior_in_flight = self.bytes_in_flight.get();
         let sent_packets = &self.epochs[epoch].sent_packets;
-        self.write_to_log_vec("ON_ACK_RECEIVED".to_owned(), &sent_packets,self.logged_rows);
         let AckedDetectionResult {
             acked_bytes,
             spurious_losses,
@@ -1082,22 +1080,6 @@ impl RecoveryOps for GRecovery {
             trace_id,
         )?;
         let skip_pn_unwrapped = skip_pn.unwrap_or(0);
-
-        let range: Vec<u64> = peer_sent_ack_ranges.flatten().collect();
-        let logging_values = vec![
-            format!("acked_bytes: {acked_bytes}"),
-            format!("skip_pn: {skip_pn_unwrapped}"),
-             format!("prior_in_flight: {prior_in_flight}"),
-            format!("new_bytes_in_flight:{:?}", self.bytes_in_flight.bytes_in_flight-acked_bytes),
-            format!("trace_id: {trace_id}"),
-            format!("peer_sent_ack_ranges: {:?}: {:?}",range.first().unwrap(), range.last().unwrap()),
-            format!("ack_delay: {ack_delay}"),
-            format!("handshake_status_completed :{:?}/ handshake_status_has_keys: {:?}/ handshake_status_peer_verified_address: {:?}",handshake_status.completed, handshake_status.has_handshake_keys, handshake_status.peer_verified_address),
-           
-
-        ];
-        self.logged_rows=self.write_to_log("ON_ACK_RECEIVED".to_owned(), logging_values,self.logged_rows);
-        _=self.write_to_log("ON_ACK_RECEIVED".to_owned(), vec!["".to_owned()],self.logged_rows);
 
         self.lost_spurious_count += spurious_losses;
         if let Some(thresh) = spurious_pkt_thresh {
@@ -1129,6 +1111,40 @@ impl RecoveryOps for GRecovery {
             has_ack_eliciting;
         if update_rtt {
             let latest_rtt = now - largest_newly_acked.time_sent;
+            let logging_values = vec![
+                format!("acked_bytes: {acked_bytes}"),
+                format!("skip_pn: {skip_pn_unwrapped}"),
+                format!("prior_in_flight: {prior_in_flight}"),
+                format!(
+                    "bytes_in_flight:{:?}",
+                    self.bytes_in_flight.bytes_in_flight
+                ),
+                format!("latest_rtt[ms]:{:?}", latest_rtt.as_millis()),
+                format!(
+                    "largest_newly_acked.time_send[ms]: {:?}",
+                    largest_newly_acked.time_sent.elapsed().as_millis()
+                ),
+                format!(
+                    "largest_newly_acked.time_received[ms]: {:?}",
+                    largest_newly_acked.delivered_time.elapsed().as_millis()
+                ),
+                format!("event_time [ms]: {:?}", now.elapsed().as_millis()),
+                format!(
+                    "last ack timestamp [ms]: {:?}",
+                    self.newly_acked
+                        .last()
+                        .unwrap()
+                        .delivered_time
+                        .elapsed()
+                        .as_millis()
+                ),
+                format!("ack_delay [ms]: {ack_delay}"),
+            ];
+            self.logged_rows = self.write_to_log(
+                "ACK_RECEIVED".to_owned(),
+                logging_values,
+                self.logged_rows,
+            );
             self.rtt_stats.update_rtt(
                 latest_rtt,
                 Duration::from_micros(ack_delay),

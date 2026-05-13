@@ -32,6 +32,8 @@ use std::time::Instant;
 
 use super::Acked;
 use crate::packet;
+use crate::ranges::RangeSet;
+use std::fs;
 use crate::recovery::gcongestion::CongestionControl;
 use crate::recovery::gcongestion::GRecovery;
 use crate::recovery::rtt::RttStats;
@@ -43,7 +45,7 @@ use crate::CongestionControlAlgorithm;
 use crate::DEFAULT_INITIAL_RTT;
 
 pub(crate) struct TestSender {
-    cc: GRecovery,
+    pub(crate) cc: GRecovery,
     pub(crate) next_pkt: u64,
     pub(crate) next_ack: u64,
     pub(crate) bytes_in_flight: usize,
@@ -57,7 +59,7 @@ impl TestSender {
         let mut cfg = crate::Config::new(crate::PROTOCOL_VERSION).unwrap();
         cfg.set_cc_algorithm(algo);
         cfg.enable_hystart(hystart);
-
+        let _=fs::remove_file("saved_params.csv");
         TestSender {
             next_pkt: 0,
             next_ack: 0,
@@ -67,9 +69,10 @@ impl TestSender {
                 DEFAULT_INITIAL_RTT,
                 Duration::from_micros(0),
             ),
-            cc: GRecovery::from_config(&RecoveryConfig::from_config(&cfg)),
+            cc: GRecovery::new(&RecoveryConfig::from_config(&cfg)).unwrap(),
             sent_packets: VecDeque::new(),
         }
+        
     }
 
     pub(crate) fn send_packet(
@@ -110,8 +113,8 @@ impl TestSender {
     }
 
     pub(crate) fn inject_ack(
-        &mut self, acked: Acked, now: Instant, peer_sent_ack_ranges: &RangeSet,
-        ack_delay: u64, epoch: packet::Epoch, handshake_status: HandshakeStatus,
+        &mut self, now: Instant, peer_sent_ack_ranges: &RangeSet, ack_delay: u64,
+        epoch: packet::Epoch, handshake_status: HandshakeStatus,
         skip_pn: Option<u64>,
     ) {
         let _ = self.sent_packets.pop_front().unwrap();
@@ -127,7 +130,11 @@ impl TestSender {
         );
     }
 
-    pub(crate) fn ack_n_packets(&mut self, n: usize, bytes: usize) {
+    pub(crate) fn ack_n_packets(
+        &mut self, n: usize, bytes: usize, now: Instant,
+        peer_sent_ack_ranges: &RangeSet, ack_delay: u64, epoch: packet::Epoch,
+        handshake_status: HandshakeStatus, skip_pn: Option<u64>,
+    ) {
         let mut acked = Vec::new();
 
         for _ in 0..n {
@@ -147,12 +154,18 @@ impl TestSender {
 
             self.next_ack += 1;
         }
-
+        let mut range = RangeSet::new(10 - 1);
+        for r in 0..10 - 1 {
+            range.push_item(r as u64);
+        }
         self.cc.on_ack_received(
-            self.bytes_in_flight,
-            &mut acked,
-            &self.rtt_stats,
-            self.time,
+            &range,
+            ack_delay,
+            epoch,
+            handshake_status,
+            now,
+            skip_pn,
+            &"".to_ascii_lowercase(),
         );
 
         self.bytes_in_flight -= n * bytes;
@@ -172,18 +185,6 @@ impl TestSender {
         if let Some(time) = time_sent {
             unacked.time_sent = time;
         }
-
-        if !self.cc.in_congestion_recovery(unacked.time_sent) {
-            (self.cc.cc_ops.checkpoint)(&mut self.cc);
-        }
-
-        (self.cc_ops.congestion_event)(
-            &mut self.cc,
-            self.bytes_in_flight,
-            n * bytes,
-            &unacked,
-            self.time,
-        );
 
         self.cc.lost_count += n;
         self.bytes_in_flight -= n * bytes;

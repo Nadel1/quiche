@@ -446,8 +446,8 @@ pub(crate) struct BBRv2 {
     last_quiescence_start: Option<Instant>,
     params: Params,
     logging_name: String,
+    logged_rows: i64,
 }
-
 
 struct BBRv2CongestionEvent {
     event_time: Instant,
@@ -511,8 +511,6 @@ impl BBRv2 {
         max_segment_size: usize, smoothed_rtt: Duration,
         custom_bbr_params: Option<&BbrParams>, logging_name: String,
     ) -> Self {
-
-
         let cwnd = initial_congestion_window * max_segment_size;
 
         let params = if let Some(custom_bbr_settings) = custom_bbr_params {
@@ -522,7 +520,11 @@ impl BBRv2 {
         };
 
         BBRv2 {
-            mode: Mode::startup(BBRv2NetworkModel::new(&params, smoothed_rtt,logging_name)),
+            mode: Mode::startup(BBRv2NetworkModel::new(
+                &params,
+                smoothed_rtt,
+                logging_name,
+            )),
             cwnd,
             pacing_rate: initial_pacing_rate(cwnd, smoothed_rtt, &params),
             cwnd_limits: Limits {
@@ -535,15 +537,14 @@ impl BBRv2 {
             last_quiescence_start: None,
             mss: max_segment_size,
             params,
-            logging_name:"".to_owned(),
+            logging_name: "".to_owned(),
+            logged_rows: 0,
         }
     }
 
     pub fn time_sent_set_to_now(&self) -> bool {
         self.params.time_sent_set_to_now
     }
-
-
 
     fn on_exit_quiescence(&mut self, now: Instant) {
         if let Some(last_quiescence_start) = self.last_quiescence_start.take() {
@@ -693,16 +694,7 @@ impl CongestionControl for BBRv2 {
             self.on_exit_quiescence(sent_time);
         }
         let network_model = self.mode.network_model_mut();
-        let logging_values = vec![
-        
-            self.cwnd as u128,
-            bytes_in_flight as u128,
-            network_model.cwnd_gain() as u128,
-            network_model.min_rtt().as_micros(),
-            network_model.min_rtt_timestamp().elapsed().as_micros() as u128,
 
-        ];
-        
         network_model.on_packet_sent(
             sent_time,
             bytes_in_flight,
@@ -710,9 +702,6 @@ impl CongestionControl for BBRv2 {
             bytes,
             is_retransmissible,
         );
-
-        
-        //self.write_to_log(self.mode.to_string(), logging_values);
     }
 
     fn on_congestion_event(
@@ -766,19 +755,14 @@ impl CongestionControl for BBRv2 {
         if !self.last_sample_is_app_limited {
             self.has_non_app_limited_sample = true;
         }
-        let sample_min_rtt= congestion_event.sample_min_rtt;
-        let mut log_sample_min_rtt:u128=0;
-        if !sample_min_rtt.is_none(){
-            log_sample_min_rtt=sample_min_rtt.unwrap().as_micros() as u128;
-        }
-        
+
         if congestion_event.bytes_in_flight == 0 &&
             self.params.avoid_unnecessary_probe_rtt
         {
-            self.on_enter_quiescence(event_time);
+            self.on_enter_quiescence(
+                acked_packets.last().unwrap().delivered_time,
+            ); // instead of event_time to not postpone indefinetely
         }
-        
-        
     }
 
     fn on_packet_neutered(&mut self, packet_number: u64) {
@@ -850,9 +834,107 @@ impl CongestionControl for BBRv2 {
 
 #[cfg(test)]
 mod tests {
+    use std::cmp;
+
+    use crate::packet;
+    use crate::ranges::RangeSet;
+    use crate::recovery::gcongestion::test_sender::TestSender;
+    use crate::recovery::HandshakeStatus;
+    use crate::recovery::RecoveryOps;
+    use crate::CongestionControlAlgorithm;
     use rstest::rstest;
 
+    // The default initial congestion window size in terms of packet count.
+    const DEFAULT_INITIAL_CONGESTION_WINDOW_PACKETS: usize = 10;
+
+    const MAX_DATAGRAM_SIZE: usize = 1350;
+
     use super::*;
+
+    fn test_sender() -> TestSender {
+        TestSender::new(CongestionControlAlgorithm::Bbr2Gcongestion, false)
+    }
+
+    #[test]
+    fn bbr_perpetual_recovery_trap() {
+        // Reproduces the bug where cwnd stays pinned at minimum after a
+        // loss event because the idle-time epoch shift pushes
+        // congestion_recovery_start_time into the future on every
+        // send -> ACK -> send cycle when bif transiently hits 0.
+        let mut sender = test_sender();
+        let size = MAX_DATAGRAM_SIZE;
+        let rtt = Duration::from_millis(1000);
+
+        // Fill the pipe.
+        for _ in 0..DEFAULT_INITIAL_CONGESTION_WINDOW_PACKETS {
+            sender.send_packet(
+                size,
+                packet::Epoch::Handshake,
+                HandshakeStatus::default(),
+            );
+        }
+
+        sender.update_rtt(rtt);
+        sender.advance_time(rtt);
+        // Trigger a loss to enter recovery and reduce cwnd.
+        let initial_cwnd = sender.cc.cwnd();
+        sender.lose_n_packets(1, size, None);
+        let post_loss_cwnd = sender.cc.cwnd();
+        assert_eq!(post_loss_cwnd, (initial_cwnd) as usize);
+
+
+        // ACK remaining in-flight packets to exit recovery.
+        sender.ack_n_packets(
+            DEFAULT_INITIAL_CONGESTION_WINDOW_PACKETS - 1,
+            size,
+            Instant::now(),
+            &RangeSet::default(),
+            300,
+            packet::Epoch::Handshake,
+            HandshakeStatus::default(),
+            None,
+        );
+        assert_eq!(sender.bytes_in_flight, 0);
+
+        // Now simulate the problematic pattern: send a small burst at
+        // minimum cwnd, ACK it (bif drops to 0), advance one RTT, repeat.
+        // With the bug, recovery_start_time would advance on every
+        // cycle, trapping cwnd.  With the fix, cwnd must grow.
+        let packets_per_burst = cmp::max(1, sender.cc.cwnd() / size);
+
+        for _ in 0..20 {
+            for _ in 0..packets_per_burst {
+                sender.send_packet(
+                    size,
+                    packet::Epoch::Application,
+                    HandshakeStatus::default(),
+                );
+            }
+
+            sender.advance_time(rtt);
+
+            sender.ack_n_packets(
+                packets_per_burst,
+                size,
+                Instant::now(),
+                &RangeSet::new(packets_per_burst),
+                300,
+                packet::Epoch::Handshake,
+                HandshakeStatus::default(),
+                None,
+            );
+
+            assert_eq!(sender.bytes_in_flight, 0);
+        }
+
+        // cwnd must have grown beyond the post-loss value.
+        assert!(
+            sender.cc.cwnd() == post_loss_cwnd,
+            "cwnd stuck at {} (post-loss {}): perpetual recovery trap",
+            sender.cc.cwnd(),
+            post_loss_cwnd,
+        );
+    }
 
     #[rstest]
     fn update_mss(#[values(false, true)] scale_pacing_rate_by_mss: bool) {
