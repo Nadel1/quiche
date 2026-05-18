@@ -656,7 +656,7 @@ impl BBRv2NetworkModel {
         if congestion_event.event_time <
             self.min_rtt_filter.min_rtt_timestamp + params.probe_rtt_period
         {
-            return false;
+            println!("would return false normally");//return false;
         }
         println!("In maybe expire min rtt");
         self.min_rtt_filter.force_update(

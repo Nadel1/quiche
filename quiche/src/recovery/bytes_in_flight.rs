@@ -93,6 +93,7 @@ impl BytesInFlight {
     fn update_in_flight_duration(&mut self, now: Instant) {
         if let Some(start) = self.bytes_in_flight_interval_start {
             if self.bytes_in_flight == 0 {
+                println!("update open_interval_duration");
                 self.open_interval_duration = Duration::ZERO;
                 self.closed_interval_duration += now - start;
                 self.bytes_in_flight_interval_start = None;

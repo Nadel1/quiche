@@ -35,6 +35,7 @@ mod probe_bw;
 mod probe_rtt;
 mod startup;
 
+use std::cmp;
 use std::fs::File;
 use std::time::Duration;
 use std::time::Instant;
@@ -444,6 +445,7 @@ pub(crate) struct BBRv2 {
     last_sample_is_app_limited: bool,
     has_non_app_limited_sample: bool,
     last_quiescence_start: Option<Instant>,
+    last_sent_time: Option<Instant>,
 
     params: Params,
     logging_name: String,
@@ -540,6 +542,7 @@ impl BBRv2 {
             params,
             logging_name: "".to_owned(),
             logged_rows: 0,
+            last_sent_time: None,
         }
     }
 
@@ -645,6 +648,7 @@ impl BBRv2 {
     }
 
     fn on_enter_quiescence(&mut self, time: Instant) {
+        println!("entering quiescence");
         self.last_quiescence_start = Some(time);
     }
 
@@ -691,7 +695,9 @@ impl CongestionControl for BBRv2 {
         &mut self, sent_time: Instant, bytes_in_flight: usize,
         packet_number: u64, bytes: usize, is_retransmissible: bool,
     ) {
+        self.last_sent_time = Some(sent_time);
         if bytes_in_flight == 0 && self.params.avoid_unnecessary_probe_rtt {
+            println!("exits quiescence");
             self.on_exit_quiescence(sent_time);
         }
         let network_model = self.mode.network_model_mut();
@@ -756,17 +762,28 @@ impl CongestionControl for BBRv2 {
         if !self.last_sample_is_app_limited {
             self.has_non_app_limited_sample = true;
         }
-
+        let idle_start = cmp::max(
+            last_ack_time.unwrap_or(event_time),
+            self.last_sent_time.unwrap_or(event_time),
+        ); // keeps increasing
         if congestion_event.bytes_in_flight == 0 &&
             self.params.avoid_unnecessary_probe_rtt
         {
             println!(
-                "Difference is: {:?}",
-                event_time - last_ack_time.unwrap_or(event_time)
+                "==Idle start: {:?}, difference: {:?}===",
+                idle_start,
+                idle_start - event_time
             );
-            self.on_enter_quiescence(
-                acked_packets.last().unwrap().delivered_time,
-            ); // instead of event_time to not postpone indefinetely
+            let delta = event_time - idle_start;
+
+            println!("---Delta: {:?}---\n\n", delta);
+
+            if delta.as_nanos() > 0 {
+
+                self.on_enter_quiescence(
+                    acked_packets.last().unwrap().delivered_time,
+                ); // instead of event_time to not postpone indefinetely
+            }
         }
     }
 
@@ -937,7 +954,6 @@ mod tests {
             sender.cc.cwnd(),
             post_loss_cwnd,
         );
-        println!("{:?}", sender.cc.cwnd());
     }
 
     #[rstest]

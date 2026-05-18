@@ -601,7 +601,6 @@ impl RecoveryOps for LegacyRecovery {
                 .unwrap_or_default();
             // Increase the congestion window by a jump determined by careful
             // resume
-            println!("on_packet_sent, state: {:?}, bytes_acked: {:?} initial_congestion {:?}, iw {:?}",self.congestion.resume.get_state(),bytes_acked,self.congestion.initial_congestion_window_packets,iw_acked);
             self.congestion.congestion_window =
                 self.congestion.resume.send_packet(
                     Some(self.rtt_stats.smoothed_rtt),
@@ -623,10 +622,7 @@ impl RecoveryOps for LegacyRecovery {
                         self.bytes_in_flight.get() / self.max_datagram_size >=
                             self.congestion.congestion_window
                     {
-                        println!(
-                            "checking flight size, state is: {:?}",
-                            self.congestion.resume.get_state()
-                        );
+       
                         self.congestion.congestion_window =
                             self.congestion.resume.check_flight_size(
                                 self.bytes_in_flight.get(),

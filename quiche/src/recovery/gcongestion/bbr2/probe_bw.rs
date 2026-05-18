@@ -187,7 +187,6 @@ impl ModeImpl for ProbeBW {
     fn on_exit_quiescence(
         mut self, now: Instant, quiescence_start_time: Instant, _params: &Params,
     ) -> Mode {
-        println!("postponing_min_rtt_timestamp to {:?}", now - quiescence_start_time);
         self.model
             .postpone_min_rtt_timestamp(now - quiescence_start_time);
         Mode::ProbeBW(self)
