@@ -322,6 +322,7 @@ impl BBRv2NetworkModel {
     }
 
     pub(super) fn min_rtt_timestamp(&self) -> Instant {
+
         self.min_rtt_filter.get_timestamps()
     }
 
@@ -335,10 +336,14 @@ impl BBRv2NetworkModel {
 
     fn write_to_log(
         &mut self, logging_values: Vec<String>, mut logged_rows: i64,
-    ) -> i64 {
+    ) {
         use std::io::Write;
+        println!(
+            "self.logging_name in network model: {:?}",
+            self.logging_name
+        );
         if self.logging_name == "" {
-            return 0;
+            return;
         }
         let mut file = File::options()
             .append(true)
@@ -352,11 +357,11 @@ impl BBRv2NetworkModel {
             save_string.push_str(&val);
         }
         save_string.push_str("\n");
-
-        let _ = file.write_all(save_string.as_bytes());
-        logged_rows += 1;
-
-        logged_rows
+        if self.logged_rows < 100 {
+            let _ = file.write_all(save_string.as_bytes());
+            self.logged_rows += 1;
+        }
+        println!("logged_rows: {logged_rows}");
     }
 
     pub(super) fn on_packet_sent(
@@ -653,10 +658,25 @@ impl BBRv2NetworkModel {
             return false;
         }
 
+        let logging_values = vec![
+            format!(
+                "min_rtt_timestamp: {:?}",
+                self.min_rtt_filter.min_rtt_timestamp
+            ),
+            format!(" params.probe_rtt_period: {:?}", params.probe_rtt_period),
+            format!(
+                "would return false: {:?}",
+                congestion_event.event_time <
+                    self.min_rtt_filter.min_rtt_timestamp +
+                        params.probe_rtt_period
+            ),
+        ];
+        self.write_to_log(logging_values, self.logged_rows);
         if congestion_event.event_time <
             self.min_rtt_filter.min_rtt_timestamp + params.probe_rtt_period
         {
-            println!("would return false normally");//return false;
+            println!("would return false normally");
+            //return false;
         }
         println!("In maybe expire min rtt");
         self.min_rtt_filter.force_update(
@@ -865,7 +885,7 @@ impl BBRv2NetworkModel {
             ),
             format!("adding: {:?}", duration.as_millis()),
         ];
-        self.logged_rows = self.write_to_log(logging_values, self.logged_rows);
+        self.write_to_log(logging_values, self.logged_rows);
         self.min_rtt_filter
             .force_update(self.min_rtt(), self.min_rtt_timestamp().add(duration));
     }

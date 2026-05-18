@@ -144,7 +144,6 @@ impl Pacer {
         );
 
         if !self.enabled || !is_retransmissible {
-            println!("not enabled: {:?}, not is_retransmissible: {:?}", !self.enabled, !is_retransmissible);
             return;
         }
 

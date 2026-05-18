@@ -757,10 +757,10 @@ impl GRecovery {
     fn write_to_log(
         &mut self, sent_from: String, logging_values: Vec<String>,
         mut logged_rows: i64,
-    ) -> i64 {
+    ) {
         use std::io::Write;
         if self.logging_name == "" {
-            return 0;
+            return;
         }
         let mut file = File::options()
             .append(true)
@@ -778,10 +778,11 @@ impl GRecovery {
         }
         save_string.push_str("\n");
 
-        let _ = file.write_all(save_string.as_bytes());
-        logged_rows += 1;
-
-        logged_rows
+        
+        if self.logged_rows < 100 {
+            self.logged_rows += 1;
+            let _ = file.write_all(save_string.as_bytes());
+        }
     }
 
     fn write_to_log_vec(
@@ -1145,7 +1146,7 @@ impl RecoveryOps for GRecovery {
                 ),
                 format!("ack_delay [ms]: {ack_delay}"),
             ];
-            self.logged_rows = self.write_to_log(
+            self.write_to_log(
                 "ACK_RECEIVED".to_owned(),
                 logging_values,
                 self.logged_rows,

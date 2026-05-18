@@ -526,7 +526,7 @@ impl BBRv2 {
             mode: Mode::startup(BBRv2NetworkModel::new(
                 &params,
                 smoothed_rtt,
-                logging_name,
+                logging_name.clone(),
             )),
             cwnd,
             pacing_rate: initial_pacing_rate(cwnd, smoothed_rtt, &params),
@@ -540,9 +540,9 @@ impl BBRv2 {
             last_quiescence_start: None,
             mss: max_segment_size,
             params,
-            logging_name: "".to_owned(),
             logged_rows: 0,
             last_sent_time: None,
+            logging_name:logging_name.clone(),
         }
     }
 
