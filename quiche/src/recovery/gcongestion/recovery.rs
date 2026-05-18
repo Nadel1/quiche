@@ -208,7 +208,6 @@ impl RecoveryEpoch {
         let mut spurious_losses = 0;
         let mut spurious_pkt_thresh = None;
         let mut has_ack_eliciting = false;
-        println!("{:?}", peer_sent_ack_ranges);
         let largest_ack_received = peer_sent_ack_ranges.last().unwrap();
         let largest_acked = self
             .largest_acked_packet
@@ -509,6 +508,9 @@ pub struct GRecovery {
     pub(crate) resume: resume::Resume,
     logging_name: String,
     logged_rows: i64,
+    // Tracks when the last ACK was processed, approximating when
+    // bytes_in_flight transitioned toward zero.
+    last_ack_time: Option<Instant>,
 }
 
 impl GRecovery {
@@ -587,6 +589,7 @@ impl GRecovery {
             resume: resume::Resume::new(SAVED_CC_FILE),
             logging_name: recovery_config.logging_name.clone().to_owned(),
             logged_rows: 0,
+            last_ack_time: None,
         })
     }
 
@@ -1109,10 +1112,12 @@ impl RecoveryOps for GRecovery {
         // Check if largest packet is newly acked.
         let update_rtt = largest_newly_acked.pkt_num == largest_acked_pkt_num &&
             has_ack_eliciting;
+        self.last_ack_time = Some(now);
         if update_rtt {
             let latest_rtt = now - largest_newly_acked.time_sent;
             let logging_values = vec![
                 format!("acked_bytes: {acked_bytes}"),
+                format!("last_ack_time: {:?}", self.last_ack_time),
                 format!("skip_pn: {skip_pn_unwrapped}"),
                 format!("prior_in_flight: {prior_in_flight}"),
                 format!(
@@ -1166,6 +1171,7 @@ impl RecoveryOps for GRecovery {
             self.epochs[epoch].least_unacked(),
             &self.rtt_stats,
             &mut self.recovery_stats,
+            self.last_ack_time,
         );
 
         self.pto_count = 0;
@@ -1218,6 +1224,7 @@ impl RecoveryOps for GRecovery {
                             self.epochs[epoch].least_unacked(),
                             &self.rtt_stats,
                             &mut self.recovery_stats,
+                            self.last_ack_time,
                         );
                     },
                 }
@@ -1233,6 +1240,7 @@ impl RecoveryOps for GRecovery {
                     self.epochs[epoch].least_unacked(),
                     &self.rtt_stats,
                     &mut self.recovery_stats,
+                    self.last_ack_time,
                 );
             }
 

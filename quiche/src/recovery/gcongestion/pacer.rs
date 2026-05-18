@@ -248,7 +248,7 @@ impl Pacer {
         &mut self, rtt_updated: bool, prior_in_flight: usize,
         bytes_in_flight: usize, event_time: Instant, acked_packets: &[Acked],
         lost_packets: &[Lost], least_unacked: u64, rtt_stats: &RttStats,
-        recovery_stats: &mut RecoveryStats,
+        recovery_stats: &mut RecoveryStats,last_ack_time:Option<Instant>
     ) {
         self.sender.on_congestion_event(
             rtt_updated,
@@ -260,6 +260,7 @@ impl Pacer {
             least_unacked,
             rtt_stats,
             recovery_stats,
+            last_ack_time
         );
 
         if !self.enabled {

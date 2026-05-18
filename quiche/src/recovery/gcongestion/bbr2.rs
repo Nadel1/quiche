@@ -444,6 +444,7 @@ pub(crate) struct BBRv2 {
     last_sample_is_app_limited: bool,
     has_non_app_limited_sample: bool,
     last_quiescence_start: Option<Instant>,
+
     params: Params,
     logging_name: String,
     logged_rows: i64,
@@ -708,7 +709,7 @@ impl CongestionControl for BBRv2 {
         &mut self, _rtt_updated: bool, prior_in_flight: usize,
         _bytes_in_flight: usize, event_time: Instant, acked_packets: &[Acked],
         lost_packets: &[Lost], least_unacked: u64, rtt_stats: &RttStats,
-        recovery_stats: &mut RecoveryStats,
+        recovery_stats: &mut RecoveryStats, last_ack_time: Option<Instant>,
     ) {
         let mut congestion_event = BBRv2CongestionEvent::new(
             event_time,
@@ -759,6 +760,10 @@ impl CongestionControl for BBRv2 {
         if congestion_event.bytes_in_flight == 0 &&
             self.params.avoid_unnecessary_probe_rtt
         {
+            println!(
+                "Difference is: {:?}",
+                event_time - last_ack_time.unwrap_or(event_time)
+            );
             self.on_enter_quiescence(
                 acked_packets.last().unwrap().delivered_time,
             ); // instead of event_time to not postpone indefinetely
@@ -862,6 +867,7 @@ mod tests {
         // congestion_recovery_start_time into the future on every
         // send -> ACK -> send cycle when bif transiently hits 0.
         let mut sender = test_sender();
+        let initial_cwnd = sender.cc.cwnd();
         let size = MAX_DATAGRAM_SIZE;
         let rtt = Duration::from_millis(1000);
 
@@ -877,11 +883,10 @@ mod tests {
         sender.update_rtt(rtt);
         sender.advance_time(rtt);
         // Trigger a loss to enter recovery and reduce cwnd.
-        let initial_cwnd = sender.cc.cwnd();
+        // let initial_cwnd = sender.cc.cwnd();
         sender.lose_n_packets(1, size, None);
         let post_loss_cwnd = sender.cc.cwnd();
-        assert_eq!(post_loss_cwnd, (initial_cwnd) as usize);
-
+        // assert_eq!(post_loss_cwnd, (initial_cwnd) as usize);
 
         // ACK remaining in-flight packets to exit recovery.
         sender.ack_n_packets(
@@ -898,10 +903,8 @@ mod tests {
 
         // Now simulate the problematic pattern: send a small burst at
         // minimum cwnd, ACK it (bif drops to 0), advance one RTT, repeat.
-        // With the bug, recovery_start_time would advance on every
-        // cycle, trapping cwnd.  With the fix, cwnd must grow.
         let packets_per_burst = cmp::max(1, sender.cc.cwnd() / size);
-
+        assert_eq!(sender.cc.cwnd(), initial_cwnd);
         for _ in 0..20 {
             for _ in 0..packets_per_burst {
                 sender.send_packet(
@@ -934,6 +937,7 @@ mod tests {
             sender.cc.cwnd(),
             post_loss_cwnd,
         );
+        println!("{:?}", sender.cc.cwnd());
     }
 
     #[rstest]

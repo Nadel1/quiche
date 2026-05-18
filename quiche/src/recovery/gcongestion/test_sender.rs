@@ -33,7 +33,6 @@ use std::time::Instant;
 use super::Acked;
 use crate::packet;
 use crate::ranges::RangeSet;
-use std::fs;
 use crate::recovery::gcongestion::CongestionControl;
 use crate::recovery::gcongestion::GRecovery;
 use crate::recovery::rtt::RttStats;
@@ -43,6 +42,7 @@ use crate::recovery::RecoveryOps;
 use crate::recovery::Sent;
 use crate::CongestionControlAlgorithm;
 use crate::DEFAULT_INITIAL_RTT;
+use std::fs;
 
 pub(crate) struct TestSender {
     pub(crate) cc: GRecovery,
@@ -59,7 +59,7 @@ impl TestSender {
         let mut cfg = crate::Config::new(crate::PROTOCOL_VERSION).unwrap();
         cfg.set_cc_algorithm(algo);
         cfg.enable_hystart(hystart);
-        let _=fs::remove_file("saved_params.csv");
+        let _ = fs::remove_file("saved_params.csv");
         TestSender {
             next_pkt: 0,
             next_ack: 0,
@@ -72,7 +72,6 @@ impl TestSender {
             cc: GRecovery::new(&RecoveryConfig::from_config(&cfg)).unwrap(),
             sent_packets: VecDeque::new(),
         }
-        
     }
 
     pub(crate) fn send_packet(
