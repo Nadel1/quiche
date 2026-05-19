@@ -108,6 +108,11 @@ impl ModeImpl for ProbeBW {
             }
         }
 
+                
+        let logging_values = vec![
+            format!("phase: {:?}", self.cycle.phase),
+        ];
+        self.model.write_to_log(logging_values);
         let mut switch_to_probe_rtt = false;
 
         match self.cycle.phase {
@@ -124,11 +129,8 @@ impl ModeImpl for ProbeBW {
                     congestion_event,
                     params,
                 );
-                if self.cycle.phase != CyclePhase::Down &&
-                    self.model.maybe_expire_min_rtt(congestion_event, params)
-                {
-                    switch_to_probe_rtt = true;
-                    println!("Switch to probe rtt set to true");
+                if self.cycle.phase != CyclePhase::Down {
+                    println!("would check expire");
                 }
             },
             CyclePhase::Cruise => self.update_probe_cruise(
@@ -141,6 +143,11 @@ impl ModeImpl for ProbeBW {
                 congestion_event,
                 params,
             ),
+        }
+        if self.cycle.phase != CyclePhase::Down &&
+            self.model.maybe_expire_min_rtt(congestion_event, params)
+        {
+            switch_to_probe_rtt = true;
         }
 
         // Do not need to set the gains if switching to PROBE_RTT, they will be
@@ -291,44 +298,6 @@ impl ProbeBW {
         &mut self, target_bytes_inflight: usize,
         congestion_event: &BBRv2CongestionEvent, params: &Params,
     ) {
-        let logging_values = vec![
-            self.model.rounds_with_queueing() as u128,
-            self.model.min_bytes_in_flight_in_round() as u128,
-            self.model.cwnd_gain() as u128,
-            self.model.pacing_gain() as u128,
-            self.model.inflight_hi() as u128,
-            congestion_event.event_time.elapsed().as_millis() as u128,
-            congestion_event.prior_cwnd as u128,
-            congestion_event.prior_bytes_in_flight as u128,
-            congestion_event.bytes_in_flight as u128,
-            congestion_event.bytes_acked as u128,
-            congestion_event.bytes_lost as u128,
-            congestion_event.end_of_round_trip as u128,
-            congestion_event.is_probing_for_bandwidth as u128,
-            congestion_event
-                .sample_max_bandwidth
-                .unwrap_or(Bandwidth { bits_per_second: 0 })
-                .bits_per_second as u128,
-            congestion_event
-                .sample_min_rtt
-                .unwrap_or(Duration::from_millis(0))
-                .as_millis(),
-            congestion_event.last_packet_send_state.is_valid as u128,
-            congestion_event.last_packet_send_state.is_app_limited as u128,
-            congestion_event.last_packet_send_state.total_bytes_sent as u128,
-            congestion_event.last_packet_send_state.total_bytes_acked as u128,
-            congestion_event.last_packet_send_state.total_bytes_lost as u128,
-            congestion_event.last_packet_send_state.bytes_in_flight as u128,
-            self.cycle.is_sample_from_probing as u128,
-            self.model.loss_events_in_round() as u128,
-            self.model.get_total_acked_bytes() as u128,
-            self.model
-                .bandwidth_lo
-                .unwrap_or(Bandwidth::infinite())
-                .bits_per_second as u128,
-            self.model.round_trip_count() as u128,
-        ];
-
         if self.cycle.rounds_in_phase == 1 && congestion_event.end_of_round_trip {
             self.cycle.is_sample_from_probing = false;
 
@@ -551,8 +520,6 @@ impl ProbeBW {
             }
         }
 
-
-
         if is_risky || is_queuing {
             self.enter_probe_down(
                 false,
@@ -590,11 +557,9 @@ impl ProbeBW {
         &mut self, target_bytes_inflight: usize,
         congestion_event: &BBRv2CongestionEvent, params: &Params,
     ) -> AdaptUpperBoundsResult {
-        println!("in maybe_adapt_upper_bounds");
         let send_state = congestion_event.last_packet_send_state;
 
         if !send_state.is_valid {
-            println!("early return");
             return AdaptUpperBoundsResult::NotAdaptedInvalidSample;
         }
 
@@ -604,17 +569,13 @@ impl ProbeBW {
             inflight_at_send = self.model.total_bytes_acked() -
                 congestion_event.last_packet_send_state.total_bytes_acked;
         }
-        println!(
-            "is sample from probing: {:?}",
-            self.cycle.is_sample_from_probing
-        );
+
         if self.cycle.is_sample_from_probing {
             if self.model.is_inflight_too_high(
                 congestion_event,
                 params.probe_bw_full_loss_count,
                 params,
             ) {
-                println!("first if check passed");
                 self.cycle.is_sample_from_probing = false;
                 if !send_state.is_app_limited ||
                     params.max_probe_up_queue_rounds > 0
@@ -632,9 +593,6 @@ impl ProbeBW {
                             .max_bytes_delivered_in_round()
                             .max(new_inflight_hi);
                     }
-                    println!(
-                        "setting inflight hi from maybe_adapt_upper_bounds 1"
-                    );
                     self.model.set_inflight_hi(new_inflight_hi);
                 }
                 return AdaptUpperBoundsResult::AdaptedProbedTooHigh;
@@ -648,7 +606,6 @@ impl ProbeBW {
 
         // Raise the upper bound for inflight.
         if inflight_at_send > self.model.inflight_hi() {
-            println!("setting inflight hi from maybe_adapt_upper_bounds 2");
             self.model.set_inflight_hi(inflight_at_send);
         }
 
@@ -750,9 +707,6 @@ impl ProbeBW {
                 let new_inflight_hi =
                     self.model.inflight_hi() + delta * DEFAULT_MSS;
                 if new_inflight_hi > self.model.inflight_hi() {
-                    println!(
-                        "setting inflight hi from probe_inflight_high_upward 1"
-                    );
                     self.model.set_inflight_hi(new_inflight_hi);
                 }
             }

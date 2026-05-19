@@ -530,8 +530,6 @@ impl Path {
         // data is sent. Handshake ACKs may be sent prior to arrival of
         // the full ClientHello, but the send of ACK only packets
         // shouldn't prevent the reinit of the recovery module.
-        println!("can reinit: {:?}",self.recovery.bytes_in_flight() == 0 &&
-            self.recovery.bytes_in_flight_duration() == Duration::ZERO);
         self.recovery.bytes_in_flight() == 0 &&
             self.recovery.bytes_in_flight_duration() == Duration::ZERO
     }

@@ -155,14 +155,12 @@ impl Pacer {
             self.burst_tokens = self
                 .initial_burst_size
                 .min(self.sender.get_congestion_window_in_packets());
-            println!("setting burst tokens to: {:?}", self.burst_tokens);
         }
 
         if self.burst_tokens > 0 {
             self.burst_tokens -= 1;
             self.ideal_next_packet_send_time = ReleaseTime::Immediate;
             self.pacing_limited = false;
-            println!("fast return in pacer");
             return;
         }
 
@@ -240,7 +238,6 @@ impl Pacer {
         self.lumpy_tokens -= 1;
         self.ideal_next_packet_send_time.set_max(sent_time);
         self.ideal_next_packet_send_time.inc(delay);
-        println!("bytes: {bytes}, bytes_in_flight: {bytes_in_flight}");
         // Stop making up for lost time if underlying sender prevents sending.
         self.pacing_limited = self.sender.can_send(bytes_in_flight + bytes);
     }

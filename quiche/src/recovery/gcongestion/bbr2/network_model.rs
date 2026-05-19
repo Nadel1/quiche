@@ -36,6 +36,7 @@ use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 
 use crate::recovery::gcongestion::bbr::BandwidthSampler;
+use crate::recovery::gcongestion::bbr2::mode::CyclePhase;
 use crate::recovery::gcongestion::bbr2::Params;
 use crate::recovery::gcongestion::Bandwidth;
 use crate::recovery::gcongestion::Lost;
@@ -94,25 +95,12 @@ impl MinRttFilter {
 
     fn update(&mut self, sample_rtt: Duration, now: Instant) {
         if sample_rtt < self.min_rtt {
-            println!("Updating min_rtt to {:?}", sample_rtt.as_micros());
             self.min_rtt = sample_rtt;
             self.min_rtt_timestamp = now;
-        } else {
-            println!(
-                "Not updating min_rtt: {:?} not smaller than {:?}",
-                sample_rtt.as_micros(),
-                self.min_rtt.as_micros()
-            );
         }
     }
 
     fn force_update(&mut self, sample_rtt: Duration, now: Instant) {
-        println!(
-            "Force updating min_rtt to {:?} with timestamp {:?}",
-            sample_rtt.as_micros(),
-            now.elapsed().as_micros()
-        );
-
         self.min_rtt = sample_rtt;
         self.min_rtt_timestamp = now;
     }
@@ -322,7 +310,6 @@ impl BBRv2NetworkModel {
     }
 
     pub(super) fn min_rtt_timestamp(&self) -> Instant {
-
         self.min_rtt_filter.get_timestamps()
     }
 
@@ -334,14 +321,11 @@ impl BBRv2NetworkModel {
         self.min_bytes_in_flight_in_round
     }
 
-    fn write_to_log(
-        &mut self, logging_values: Vec<String>, mut logged_rows: i64,
+    pub fn write_to_log(
+        &mut self, logging_values: Vec<String>
     ) {
         use std::io::Write;
-        println!(
-            "self.logging_name in network model: {:?}",
-            self.logging_name
-        );
+
         if self.logging_name == "" {
             return;
         }
@@ -357,11 +341,10 @@ impl BBRv2NetworkModel {
             save_string.push_str(&val);
         }
         save_string.push_str("\n");
-        if self.logged_rows < 100 {
+        if self.logged_rows < 2000 {
             let _ = file.write_all(save_string.as_bytes());
             self.logged_rows += 1;
         }
-        println!("logged_rows: {logged_rows}");
     }
 
     pub(super) fn on_packet_sent(
@@ -373,8 +356,9 @@ impl BBRv2NetworkModel {
             format!("bytes_in_flight: {bytes_in_flight}"),
             format!("packet_number: {packet_number}"),
             format!("bytes: {bytes}"),
+            format!("min_rtt: {:?} [ms]", self.min_rtt().as_millis()),
         ];
-        // self.logged_rows = self.write_to_log(logging_values, self.logged_rows);
+        // self.write_to_log(logging_values, self.logged_rows);
         // Updating the min here ensures a more realistic (0) value when flows
         // exit quiescence.
         self.min_bytes_in_flight_in_round =
@@ -447,13 +431,19 @@ impl BBRv2NetworkModel {
         }
 
         if let Some(rtt_sample) = sample.sample_rtt {
-            println!(
-                "Rtt sample: {:?}, event time: {:?}",
-                rtt_sample,
-                event_time.elapsed().as_micros()
-            );
             congestion_event.sample_min_rtt = Some(rtt_sample);
             self.min_rtt_filter.update(rtt_sample, event_time);
+            let logging_values = vec![
+                format!(
+                    "updated min_rtt_value: {:?} ms",
+                    self.min_rtt_filter.get().as_millis()
+                ),
+                format!(
+                    "updated min_rtt_timestamp: {:?}",
+                    self.min_rtt_filter.min_rtt_timestamp
+                ),
+            ];
+            self.write_to_log(logging_values);
         }
 
         self.latest_send_rate = sample.sample_max_send_rate;
@@ -659,11 +649,20 @@ impl BBRv2NetworkModel {
         }
 
         let logging_values = vec![
+            format!("now: {:?}", Instant::now()),
             format!(
-                "min_rtt_timestamp: {:?}",
-                self.min_rtt_filter.min_rtt_timestamp
+                "congestion_event event_time (elapsed): {:?}",
+                congestion_event.event_time.elapsed()
             ),
-            format!(" params.probe_rtt_period: {:?}", params.probe_rtt_period),
+            format!(
+                "comparing to (elapsed): {:?}",
+                (self.min_rtt_filter.min_rtt_timestamp + params.probe_rtt_period)
+                    .elapsed()
+            ),
+            format!(
+                "would set min_rtt value to {:?} s",
+                congestion_event.sample_min_rtt.unwrap()
+            ),
             format!(
                 "would return false: {:?}",
                 congestion_event.event_time <
@@ -671,14 +670,25 @@ impl BBRv2NetworkModel {
                         params.probe_rtt_period
             ),
         ];
-        self.write_to_log(logging_values, self.logged_rows);
+        self.write_to_log(logging_values);
+
+        let logging_values = vec![
+            format!(
+                "congestion_event event_time: {:?}",
+                congestion_event.event_time
+            ),
+            format!(
+                "comparing to: {:?}",
+                (self.min_rtt_filter.min_rtt_timestamp + params.probe_rtt_period)
+            ),
+        ];
+        self.write_to_log(logging_values);
+
         if congestion_event.event_time <
             self.min_rtt_filter.min_rtt_timestamp + params.probe_rtt_period
         {
-            println!("would return false normally");
-            //return false;
+            return false;
         }
-        println!("In maybe expire min rtt");
         self.min_rtt_filter.force_update(
             congestion_event.sample_min_rtt.unwrap(),
             congestion_event.event_time,
@@ -691,20 +701,14 @@ impl BBRv2NetworkModel {
         &self, congestion_event: &BBRv2CongestionEvent, max_loss_events: usize,
         params: &Params,
     ) -> bool {
-        println!("check inflight too high");
         let send_state = &congestion_event.last_packet_send_state;
 
         if !send_state.is_valid {
             // Not enough information.
-            println!("first condition");
             return false;
         }
 
         if self.loss_events_in_round < max_loss_events {
-            println!(
-                "second condition: {:?} < {:?}",
-                self.loss_events_in_round, max_loss_events
-            );
             return false;
         }
 
@@ -717,7 +721,6 @@ impl BBRv2NetworkModel {
             let lost_in_round_threshold =
                 (inflight_at_send as f32 * params.loss_threshold) as usize;
             if bytes_lost_in_round > lost_in_round_threshold {
-                println!("third condition");
                 return true;
             }
         }
@@ -885,7 +888,7 @@ impl BBRv2NetworkModel {
             ),
             format!("adding: {:?}", duration.as_millis()),
         ];
-        self.write_to_log(logging_values, self.logged_rows);
+        self.write_to_log(logging_values);
         self.min_rtt_filter
             .force_update(self.min_rtt(), self.min_rtt_timestamp().add(duration));
     }

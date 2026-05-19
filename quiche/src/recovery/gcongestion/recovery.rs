@@ -1146,11 +1146,11 @@ impl RecoveryOps for GRecovery {
                 ),
                 format!("ack_delay [ms]: {ack_delay}"),
             ];
-            self.write_to_log(
-                "ACK_RECEIVED".to_owned(),
-                logging_values,
-                self.logged_rows,
-            );
+            //self.write_to_log(
+            //    "ACK_RECEIVED".to_owned(),
+            //    logging_values,
+            //    self.logged_rows,
+            //);
             self.rtt_stats.update_rtt(
                 latest_rtt,
                 Duration::from_micros(ack_delay),
