@@ -769,10 +769,8 @@ impl CongestionControl for BBRv2 {
         if congestion_event.bytes_in_flight == 0 &&
             self.params.avoid_unnecessary_probe_rtt
         {
-            println!("old plateau?");
             let delta = event_time - idle_start;
             if delta.as_nanos() > 0 {
-
                 self.on_enter_quiescence(
                     acked_packets.last().unwrap().delivered_time,
                 ); // instead of event_time to not postpone indefinetely

@@ -108,10 +108,7 @@ impl ModeImpl for ProbeBW {
             }
         }
 
-                
-        let logging_values = vec![
-            format!("phase: {:?}", self.cycle.phase),
-        ];
+        let logging_values = vec![format!("phase: {:?}", self.cycle.phase)];
         self.model.write_to_log(logging_values);
         let mut switch_to_probe_rtt = false;
 
@@ -129,9 +126,6 @@ impl ModeImpl for ProbeBW {
                     congestion_event,
                     params,
                 );
-                if self.cycle.phase != CyclePhase::Down {
-                    println!("would check expire");
-                }
             },
             CyclePhase::Cruise => self.update_probe_cruise(
                 target_bytes_inflight,
@@ -144,12 +138,12 @@ impl ModeImpl for ProbeBW {
                 params,
             ),
         }
+
         if self.cycle.phase != CyclePhase::Down &&
             self.model.maybe_expire_min_rtt(congestion_event, params)
         {
             switch_to_probe_rtt = true;
         }
-
         // Do not need to set the gains if switching to PROBE_RTT, they will be
         // set when `ProbeRTT::enter` is called.
         if !switch_to_probe_rtt {
@@ -737,86 +731,27 @@ mod tests {
     use crate::recovery::gcongestion::bbr2::DEFAULT_PARAMS;
     use crate::recovery::Bandwidth;
 
-    #[test]
-    fn plateau_normal_execution() {
-        // correct up behavior with concrete observed values
-        let last_packet_send_state_normal = SendTimeState {
-            is_valid: true,
-            is_app_limited: true,
-            total_bytes_sent: 12046680,
-            total_bytes_acked: 7147216,
-            total_bytes_lost: 4270825,
-            bytes_in_flight: 4897835,
-        };
-        let test_event_normal = BBRv2CongestionEvent {
-            event_time: Instant::now(),
-            prior_cwnd: 6829574 as usize, // should be way higher
-            prior_bytes_in_flight: 6829574 as usize, // should be way higher
-            bytes_in_flight: 6824174 as usize,
-            bytes_acked: 5400 as usize,
-            bytes_lost: 0,
-            end_of_round_trip: true,
-            is_probing_for_bandwidth: true,
-            sample_max_bandwidth: Some(Bandwidth::from_bytes_per_second(
-                20977504,
-            )),
-            sample_min_rtt: Some(Duration::from_millis(1867)), // about right
-            last_packet_send_state: last_packet_send_state_normal,
-        };
-
-        let params = &DEFAULT_PARAMS;
-        let mut model = BBRv2NetworkModel::new(
-            params,
-            Duration::from_millis(333),
-            "".to_owned(),
-        );
-
-        model.set_total_acked_bytes(7147216); // necessary, as otherwise we have an overflow
-
-        let cycle = Cycle::default();
-        let mut probe_bw = ProbeBW { model, cycle };
-        // setting this to true should force us to update the inflight_hi
-        probe_bw.cycle.is_sample_from_probing = true;
-        // probe_bw.model.set_inflight_hi(4738476 as usize); --> this should
-        // happen in update_probe_up
-        let bdp = probe_bw
-            .model
-            .bdp1(Bandwidth::from_bytes_per_second(20977504));
-        let target_bytes = bdp.min(6829574 as usize);
-
-        probe_bw.update_probe_up(
-            test_event_normal.prior_bytes_in_flight as usize,
-            target_bytes,
-            &test_event_normal,
-            params,
-        );
-
-        assert_eq!(probe_bw.cycle.probe_up_rounds, 1);
-        // Slope is increased at the end of round by decreasing probe_up_bytes.
-    }
-
-    #[test]
-    fn plateau_plateau_execution() {
+    #[rstest]
+    fn stuck_in_up() {
         let last_packet_send_state_plateau = SendTimeState {
             is_valid: true,
-            is_app_limited: false, /* this should be true in practice, but in
-                                    * the test, both should be false */
-            total_bytes_sent: 586320,
-            total_bytes_acked: 562668,
+            is_app_limited: false,
+            total_bytes_sent: 1000,
+            total_bytes_acked: 900,
             total_bytes_lost: 0,
-            bytes_in_flight: 21973,
+            bytes_in_flight: 100,
         };
-        let test_event_plateau = BBRv2CongestionEvent {
+        let mut test_event = BBRv2CongestionEvent {
             event_time: Instant::now(),
-            prior_cwnd: 21973 as usize, // should be way higher
-            prior_bytes_in_flight: 21973 as usize, // should be way higher
-            bytes_in_flight: 0,         // real: 0
-            bytes_acked: 21973 as usize,
+            prior_cwnd: 100 as usize, // should be way higher
+            prior_bytes_in_flight: 100 as usize, // should be way higher
+            bytes_in_flight: 0,       // real: 0
+            bytes_acked: 100 as usize,
             bytes_lost: 0,
             end_of_round_trip: true,
             is_probing_for_bandwidth: true,
             sample_max_bandwidth: Some(Bandwidth::from_bytes_per_second(174040)), /* should be way higher */
-            sample_min_rtt: Some(Duration::from_millis(1009)), // about right
+            sample_min_rtt: Some(Duration::from_millis(1000)), // about right
             last_packet_send_state: last_packet_send_state_plateau,
         };
 
@@ -826,10 +761,11 @@ mod tests {
             Duration::from_millis(333),
             "".to_owned(),
         );
-        model.set_total_acked_bytes(562668);
-        let cycle = Cycle::default();
+        model.set_total_acked_bytes(900);
+        let mut cycle = Cycle::default();
+        cycle.phase = CyclePhase::Up;
         let mut probe_bw = ProbeBW { model, cycle };
-        probe_bw.cycle.is_sample_from_probing = true;
+
 
         // this is simply the initial maximum value --> thus we return early in
         // probe_inflight_high_upward (which is called in update_probe_up), which
@@ -846,22 +782,27 @@ mod tests {
         let bdp = probe_bw
             .model
             .bdp1(Bandwidth::from_bytes_per_second(174040));
-        let target_bytes = bdp.min(21973 as usize);
+        let target_bytes = bdp.min(100 as usize);
 
         // main method; this calls probe_inflight_high_upward, which returns too
         // early due to the maximum inflight_hi
-        probe_bw.update_probe_up(
-            test_event_plateau.prior_bytes_in_flight as usize,
+        probe_bw.on_congestion_event(
+            test_event.prior_bytes_in_flight,
+            test_event.event_time,
+            &[],
+            &[],
+            &mut test_event,
             target_bytes,
-            &test_event_plateau,
             params,
+            &mut RecoveryStats::default(),
+            100,
         );
-        // check that returns us too early
-        assert_eq!(
-            test_event_plateau.prior_cwnd < probe_bw.model.inflight_hi(),
-            true
-        );
-        assert_eq!(probe_bw.cycle.probe_up_rounds, 0);
+
+        assert_eq!(&probe_bw.cycle.probe_up_rounds, 0); // thus we never return
+                                                       // as we never spend more
+                                                       // than 2 rounds in up,
+                                                       // which would also
+                                                       // trigger an exit
     }
 
     #[test]

@@ -144,7 +144,6 @@ pub(super) trait ModeImpl: Debug {
     ) -> Mode;
 
     fn get_cwnd_limits(&self, params: &Params) -> Limits<usize>;
-
     fn on_exit_quiescence(
         self, now: Instant, quiescence_start_time: Instant, params: &Params,
     ) -> Mode;
@@ -168,22 +167,20 @@ impl Default for Mode {
 
 impl fmt::Display for Mode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-
         match self {
-            Mode::Startup(Startup { model }) =>  write!(f, "Startup"),
-            Mode::Drain(Drain { model, .. }) =>  write!(f, "Drain"),
-            Mode::ProbeBW(ProbeBW { model, .. }) =>  write!(f, "ProbeBW"),
-            Mode::ProbeRTT(ProbeRTT { model, .. }) =>  write!(f, "ProbeRTT"),
+            Mode::Startup(Startup { model }) => write!(f, "Startup"),
+            Mode::Drain(Drain { model, .. }) => write!(f, "Drain"),
+            Mode::ProbeBW(ProbeBW { model, .. }) => write!(f, "ProbeBW"),
+            Mode::ProbeRTT(ProbeRTT { model, .. }) => write!(f, "ProbeRTT"),
             Mode::Placheolder(_) => unreachable!(),
         }
-       
+
         // or, alternatively:
         // fmt::Debug::fmt(self, f)
     }
 }
 
 impl Mode {
-
     pub(super) fn startup(model: BBRv2NetworkModel) -> Self {
         Mode::Startup(Startup { model })
     }

@@ -321,9 +321,7 @@ impl BBRv2NetworkModel {
         self.min_bytes_in_flight_in_round
     }
 
-    pub fn write_to_log(
-        &mut self, logging_values: Vec<String>
-    ) {
+    pub fn write_to_log(&mut self, logging_values: Vec<String>) {
         use std::io::Write;
 
         if self.logging_name == "" {
@@ -341,7 +339,7 @@ impl BBRv2NetworkModel {
             save_string.push_str(&val);
         }
         save_string.push_str("\n");
-        if self.logged_rows < 2000 {
+        if self.logged_rows < 50000 {
             let _ = file.write_all(save_string.as_bytes());
             self.logged_rows += 1;
         }
@@ -649,15 +647,13 @@ impl BBRv2NetworkModel {
         }
 
         let logging_values = vec![
-            format!("now: {:?}", Instant::now()),
             format!(
-                "congestion_event event_time (elapsed): {:?}",
-                congestion_event.event_time.elapsed()
+                "congestion_event event_time: {:?}",
+                congestion_event.event_time
             ),
             format!(
-                "comparing to (elapsed): {:?}",
+                "comparing to: {:?}",
                 (self.min_rtt_filter.min_rtt_timestamp + params.probe_rtt_period)
-                    .elapsed()
             ),
             format!(
                 "would set min_rtt value to {:?} s",
@@ -670,19 +666,7 @@ impl BBRv2NetworkModel {
                         params.probe_rtt_period
             ),
         ];
-        self.write_to_log(logging_values);
-
-        let logging_values = vec![
-            format!(
-                "congestion_event event_time: {:?}",
-                congestion_event.event_time
-            ),
-            format!(
-                "comparing to: {:?}",
-                (self.min_rtt_filter.min_rtt_timestamp + params.probe_rtt_period)
-            ),
-        ];
-        self.write_to_log(logging_values);
+        //self.write_to_log(logging_values);
 
         if congestion_event.event_time <
             self.min_rtt_filter.min_rtt_timestamp + params.probe_rtt_period
