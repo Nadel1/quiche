@@ -339,10 +339,9 @@ impl BBRv2NetworkModel {
             save_string.push_str(&val);
         }
         save_string.push_str("\n");
-        if self.logged_rows < 50000 {
-            let _ = file.write_all(save_string.as_bytes());
-            self.logged_rows += 1;
-        }
+
+        let _ = file.write_all(save_string.as_bytes());
+        self.logged_rows += 1;
     }
 
     pub(super) fn on_packet_sent(
@@ -449,8 +448,10 @@ impl BBRv2NetworkModel {
 
         congestion_event.bytes_acked =
             self.total_bytes_acked() - prior_bytes_acked;
+        println!("total_bytes_acked: {:?}, prior_bytes_acked: {:?}", self.total_bytes_acked(),prior_bytes_acked);
         congestion_event.bytes_lost = self.total_bytes_lost() - prior_bytes_lost;
 
+        println!("on_congestion_event_start: bytes acked: {:?}, prior in flight: {:?}, len acked: {:?}",congestion_event.bytes_acked,congestion_event.prior_bytes_in_flight,acked_packets.len());
         congestion_event.bytes_in_flight = congestion_event
             .prior_bytes_in_flight
             .saturating_sub(congestion_event.bytes_acked)
@@ -666,7 +667,7 @@ impl BBRv2NetworkModel {
                         params.probe_rtt_period
             ),
         ];
-        //self.write_to_log(logging_values);
+        // self.write_to_log(logging_values);
 
         if congestion_event.event_time <
             self.min_rtt_filter.min_rtt_timestamp + params.probe_rtt_period

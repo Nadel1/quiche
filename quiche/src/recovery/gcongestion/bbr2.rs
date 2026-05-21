@@ -648,7 +648,6 @@ impl BBRv2 {
     }
 
     fn on_enter_quiescence(&mut self, time: Instant) {
-        println!("entering quiescence");
         self.last_quiescence_start = Some(time);
     }
 
@@ -717,12 +716,15 @@ impl CongestionControl for BBRv2 {
         lost_packets: &[Lost], least_unacked: u64, rtt_stats: &RttStats,
         recovery_stats: &mut RecoveryStats, last_ack_time: Option<Instant>,
     ) {
-        println!("in on congestion event: {:?}", prior_in_flight);
         let mut congestion_event = BBRv2CongestionEvent::new(
             event_time,
             self.cwnd,
             prior_in_flight,
             self.mode.is_probing_for_bandwidth(),
+        );
+        println!(
+            "on_congestion_event: bif at the beginning: {:?}, acked packets: {:?}, acked_packets: {:?}",
+            congestion_event.bytes_in_flight,congestion_event.bytes_acked, acked_packets.len()
         );
 
         let network_model = self.mode.network_model_mut();
@@ -731,6 +733,10 @@ impl CongestionControl for BBRv2 {
             lost_packets,
             &mut congestion_event,
             &self.params,
+        );
+        println!(
+            "bif at 2: {:?}, acked packets: {:?}",
+            congestion_event.bytes_in_flight, congestion_event.bytes_acked
         );
 
         // Number of mode changes allowed for this congestion event.
@@ -751,6 +757,10 @@ impl CongestionControl for BBRv2 {
             mode_changes_allowed -= 1;
         }
 
+        println!(
+            "bif at 3: {:?}, acked packets: {:?}",
+            congestion_event.bytes_in_flight, congestion_event.bytes_acked
+        );
         self.update_pacing_rate(congestion_event.bytes_acked);
 
         self.update_congestion_window(congestion_event.bytes_acked);
@@ -758,6 +768,10 @@ impl CongestionControl for BBRv2 {
         let network_model = self.mode.network_model_mut();
         network_model
             .on_congestion_event_finish(least_unacked, &congestion_event);
+        println!(
+            "bif at 4: {:?}, acked packets: {:?}",
+            congestion_event.bytes_in_flight, congestion_event.bytes_acked
+        );
         self.last_sample_is_app_limited =
             congestion_event.last_packet_send_state.is_app_limited;
         if !self.last_sample_is_app_limited {
@@ -767,10 +781,19 @@ impl CongestionControl for BBRv2 {
             last_ack_time.unwrap_or(event_time),
             self.last_sent_time.unwrap_or(event_time),
         ); // keeps increasing
+        println!(
+            "bif: {:?}, avoid: {:?}",
+            congestion_event.bytes_in_flight,
+            self.params.avoid_unnecessary_probe_rtt
+        );
         if congestion_event.bytes_in_flight == 0 &&
             self.params.avoid_unnecessary_probe_rtt
         {
             let delta = event_time - idle_start;
+            println!(
+                "check enter: idle start: {:?}, event_time: {:?}",
+                idle_start, event_time
+            );
             if delta.as_nanos() > 0 {
                 self.on_enter_quiescence(event_time);
             }
@@ -868,7 +891,7 @@ mod tests {
     }
 
     #[rstest]
-    fn bbr_plateau() {
+    fn bbr_plateau_no_quiescence() {
         // Reproduces the bug where cwnd stays pinned at minimum after a
         // loss event because the idle-time epoch shift pushes
         // congestion_recovery_start_time into the future on every
@@ -893,7 +916,6 @@ mod tests {
             DEFAULT_INITIAL_CONGESTION_WINDOW_PACKETS,
             size,
             Instant::now(),
-            &RangeSet::default(),
             300,
             packet::Epoch::Handshake,
             HandshakeStatus::default(),
@@ -905,29 +927,29 @@ mod tests {
         // minimum cwnd, ACK it (bif drops to 0), advance one RTT, repeat. --> bif
         // at 0
         let packets_per_burst = 1;
+
         assert_eq!(sender.cc.cwnd(), initial_cwnd);
-        for _ in 0..10 {
-            sender.send_packet(
-                size,
-                packet::Epoch::Application,
-                HandshakeStatus::default(),
-            );
+        sender.send_packet(
+            size,
+            packet::Epoch::Application,
+            HandshakeStatus::default(),
+        );
 
-            sender.advance_time(rtt);
+        sender.advance_time(rtt);
 
-            sender.ack_n_packets(
-                1,
-                size,
-                Instant::now(),
-                &RangeSet::new(packets_per_burst),
-                300,
-                packet::Epoch::Handshake,
-                HandshakeStatus::default(),
-                None,
-            );
-            assert_eq!(sender.bytes_in_flight, 0);
-        }
-        
+        sender.ack_n_packets(
+            1,
+            size,
+            Instant::now(),
+            300,
+            packet::Epoch::Handshake,
+            HandshakeStatus::default(),
+            None,
+        );
+        // eventhough bytes in flight is 0, the connection is clearly not
+        // idle, thus no quiescence has been detected
+        assert_eq!(sender.bytes_in_flight, 0);//TODO: not bif deeper down
+        assert_eq!(sender.cc.pacer.sender.last_quiescence_start, None);
     }
 
     #[rstest]

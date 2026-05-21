@@ -130,9 +130,9 @@ impl TestSender {
     }
 
     pub(crate) fn ack_n_packets(
-        &mut self, n: usize, bytes: usize, now: Instant,
-        peer_sent_ack_ranges: &RangeSet, ack_delay: u64, epoch: packet::Epoch,
-        handshake_status: HandshakeStatus, skip_pn: Option<u64>,
+        &mut self, n: usize, bytes: usize, now: Instant, ack_delay: u64,
+        epoch: packet::Epoch, handshake_status: HandshakeStatus,
+        skip_pn: Option<u64>,
     ) {
         let mut acked = Vec::new();
         let mut range = RangeSet::new(n);
@@ -149,10 +149,10 @@ impl TestSender {
                 first_sent_time: unacked.first_sent_time,
                 is_app_limited: unacked.is_app_limited,
             });
-            range.push_item(r as u64);
+            println!("acked len: {:?}", acked.len());
+            range.push_item(unacked.pkt_num as u64);
             self.next_ack += 1;
         }
-
         let _ = self.cc.on_ack_received(
             &range,
             ack_delay,

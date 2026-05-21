@@ -504,7 +504,7 @@ pub struct GRecovery {
     /// [`Self::detect_and_remove_lost_packets`] to avoid allocations
     lost_reuse: Vec<Lost>,
 
-    pacer: Pacer,
+    pub(crate) pacer: Pacer,
     pub(crate) resume: resume::Resume,
     logging_name: String,
     logged_rows: i64,
@@ -525,7 +525,7 @@ impl GRecovery {
     }
 
     pub fn new(recovery_config: &RecoveryConfig) -> Option<Self> {
-        let cc = match recovery_config.cc_algorithm {
+        let cc: BBRv2 = match recovery_config.cc_algorithm {
             CongestionControlAlgorithm::Bbr2Gcongestion => BBRv2::new(
                 recovery_config.initial_congestion_window_packets,
                 MAX_WINDOW_PACKETS,
@@ -778,7 +778,6 @@ impl GRecovery {
         }
         save_string.push_str("\n");
 
-        
         if self.logged_rows < 100 {
             self.logged_rows += 1;
             let _ = file.write_all(save_string.as_bytes());
@@ -1099,6 +1098,8 @@ impl RecoveryOps for GRecovery {
         }
 
         self.bytes_in_flight.saturating_subtract(acked_bytes, now);
+        println!("on_ack_received: previous bytes in flight: {:?}",prior_in_flight);
+        println!("on_ack_received: bytes_in_flight: {:?}, acked_bytes: {:?}",self.bytes_in_flight.bytes_in_flight,acked_bytes);
 
         let largest_newly_acked = self.newly_acked.last().unwrap();
 
@@ -1146,7 +1147,7 @@ impl RecoveryOps for GRecovery {
                 ),
                 format!("ack_delay [ms]: {ack_delay}"),
             ];
-            //self.write_to_log(
+            // self.write_to_log(
             //    "ACK_RECEIVED".to_owned(),
             //    logging_values,
             //    self.logged_rows,
@@ -1161,7 +1162,7 @@ impl RecoveryOps for GRecovery {
 
         let (lost_bytes, lost_packets) =
             self.detect_and_remove_lost_packets(epoch, now);
-
+        println!("on_ack_received: {:?}", self.newly_acked.len());
         self.pacer.on_congestion_event(
             update_rtt,
             prior_in_flight,

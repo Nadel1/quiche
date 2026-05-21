@@ -64,7 +64,7 @@ pub struct Pacer {
     /// Should this [`Pacer`] be making any release decisions?
     enabled: bool,
     /// Underlying sender
-    sender: BBRv2,
+    pub(crate) sender: BBRv2,
     /// The maximum rate the [`Pacer`] will use.
     max_pacing_rate: Option<Bandwidth>,
     /// Number of unpaced packets to be sent before packets are delayed.
