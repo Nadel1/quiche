@@ -135,10 +135,10 @@ impl TestSender {
         handshake_status: HandshakeStatus, skip_pn: Option<u64>,
     ) {
         let mut acked = Vec::new();
-
-        for _ in 0..n {
+        let mut range = RangeSet::new(n);
+        for r in 0..n {
             let unacked = self.sent_packets.pop_front().unwrap();
-
+            println!("unacked size: {:?}", unacked.size);
             acked.push(Acked {
                 pkt_num: unacked.pkt_num,
                 time_sent: unacked.time_sent,
@@ -150,14 +150,11 @@ impl TestSender {
                 first_sent_time: unacked.first_sent_time,
                 is_app_limited: unacked.is_app_limited,
             });
-
+            range.push_item(r as u64);
             self.next_ack += 1;
         }
-        let mut range = RangeSet::new(10 - 1);
-        for r in 0..10 - 1 {
-            range.push_item(r as u64);
-        }
-        self.cc.on_ack_received(
+
+        let _ = self.cc.on_ack_received(
             &range,
             ack_delay,
             epoch,
@@ -166,7 +163,6 @@ impl TestSender {
             skip_pn,
             &"".to_ascii_lowercase(),
         );
-
         self.bytes_in_flight -= n * bytes;
     }
 
