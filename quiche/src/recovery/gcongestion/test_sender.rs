@@ -138,7 +138,6 @@ impl TestSender {
         let mut range = RangeSet::new(n);
         for r in 0..n {
             let unacked = self.sent_packets.pop_front().unwrap();
-            println!("unacked size: {:?}", unacked.size);
             acked.push(Acked {
                 pkt_num: unacked.pkt_num,
                 time_sent: unacked.time_sent,
