@@ -448,10 +448,8 @@ impl BBRv2NetworkModel {
 
         congestion_event.bytes_acked =
             self.total_bytes_acked() - prior_bytes_acked;
-        println!("on_congestion_event_start: total_bytes_acked: {:?}, prior_bytes_acked: {:?}", self.total_bytes_acked(),prior_bytes_acked);
         congestion_event.bytes_lost = self.total_bytes_lost() - prior_bytes_lost;
 
-        println!("on_congestion_event_start: bytes acked: {:?}, prior in flight: {:?}, len acked: {:?}",congestion_event.bytes_acked,congestion_event.prior_bytes_in_flight,acked_packets.len());
         congestion_event.bytes_in_flight = congestion_event
             .prior_bytes_in_flight
             .saturating_sub(congestion_event.bytes_acked)

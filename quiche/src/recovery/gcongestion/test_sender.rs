@@ -111,24 +111,6 @@ impl TestSender {
         self.next_pkt += 1;
     }
 
-    pub(crate) fn inject_ack(
-        &mut self, now: Instant, peer_sent_ack_ranges: &RangeSet, ack_delay: u64,
-        epoch: packet::Epoch, handshake_status: HandshakeStatus,
-        skip_pn: Option<u64>,
-    ) {
-        let _ = self.sent_packets.pop_front().unwrap();
-
-        self.cc.on_ack_received(
-            peer_sent_ack_ranges,
-            ack_delay,
-            epoch,
-            handshake_status,
-            now,
-            skip_pn,
-            &"".to_ascii_lowercase(),
-        );
-    }
-
     pub(crate) fn ack_n_packets(
         &mut self, n: usize, bytes: usize, ack_delay: u64, epoch: packet::Epoch,
         handshake_status: HandshakeStatus, skip_pn: Option<u64>,
