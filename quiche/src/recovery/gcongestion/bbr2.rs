@@ -694,6 +694,7 @@ impl CongestionControl for BBRv2 {
         &mut self, sent_time: Instant, bytes_in_flight: usize,
         packet_number: u64, bytes: usize, is_retransmissible: bool,
     ) {
+        println!("on packet sent in bbr2, is_retransmissible: {:?}",is_retransmissible);
         self.last_sent_time = Some(sent_time);
         if bytes_in_flight == 0 && self.params.avoid_unnecessary_probe_rtt {
             println!("exits quiescence");
@@ -723,7 +724,7 @@ impl CongestionControl for BBRv2 {
             self.mode.is_probing_for_bandwidth(),
         );
         println!(
-            "on_congestion_event: bif at the beginning: {:?}, acked packets: {:?}, acked_packets: {:?}",
+            "on_congestion_event: bif at the beginning: {:?}, acked bytes: {:?}, acked_packets: {:?}",
             congestion_event.bytes_in_flight,congestion_event.bytes_acked, acked_packets.len()
         );
 
@@ -735,7 +736,7 @@ impl CongestionControl for BBRv2 {
             &self.params,
         );
         println!(
-            "bif at 2: {:?}, acked packets: {:?}",
+            "bif at 2: {:?}, acked bytes: {:?}",
             congestion_event.bytes_in_flight, congestion_event.bytes_acked
         );
 
@@ -758,7 +759,7 @@ impl CongestionControl for BBRv2 {
         }
 
         println!(
-            "bif at 3: {:?}, acked packets: {:?}",
+            "bif at 3: {:?}, acked bytes: {:?}",
             congestion_event.bytes_in_flight, congestion_event.bytes_acked
         );
         self.update_pacing_rate(congestion_event.bytes_acked);
@@ -769,7 +770,7 @@ impl CongestionControl for BBRv2 {
         network_model
             .on_congestion_event_finish(least_unacked, &congestion_event);
         println!(
-            "bif at 4: {:?}, acked packets: {:?}",
+            "bif at 4: {:?}, acked bytes: {:?}",
             congestion_event.bytes_in_flight, congestion_event.bytes_acked
         );
         self.last_sample_is_app_limited =
@@ -923,6 +924,8 @@ mod tests {
         );
 
         assert_eq!(sender.bytes_in_flight, 0);
+        assert_eq!(sender.cc.bytes_in_flight(), 0);
+        println!("bytes in flight: {:?}",sender.cc.bytes_in_flight());
         // Now simulate the problematic pattern: send a small burst at
         // minimum cwnd, ACK it (bif drops to 0), advance one RTT, repeat. --> bif
         // at 0
@@ -942,13 +945,14 @@ mod tests {
             size,
             Instant::now(),
             300,
-            packet::Epoch::Handshake,
+            packet::Epoch::Application,
             HandshakeStatus::default(),
             None,
         );
         // eventhough bytes in flight is 0, the connection is clearly not
         // idle, thus no quiescence has been detected
-        assert_eq!(sender.bytes_in_flight, 0);//TODO: not bif deeper down
+        assert_eq!(sender.bytes_in_flight, 0); // TODO: not bif deeper down
+        assert_eq!(sender.cc.bytes_in_flight(), 0);
         assert_eq!(sender.cc.pacer.sender.last_quiescence_start, None);
     }
 

@@ -1098,8 +1098,14 @@ impl RecoveryOps for GRecovery {
         }
 
         self.bytes_in_flight.saturating_subtract(acked_bytes, now);
-        println!("on_ack_received: previous bytes in flight: {:?}",prior_in_flight);
-        println!("on_ack_received: bytes_in_flight: {:?}, acked_bytes: {:?}",self.bytes_in_flight.bytes_in_flight,acked_bytes);
+        println!(
+            "on_ack_received: previous bytes in flight: {:?}",
+            prior_in_flight
+        );
+        println!(
+            "on_ack_received: bytes_in_flight: {:?}, acked_bytes: {:?}",
+            self.bytes_in_flight.bytes_in_flight, acked_bytes
+        );
 
         let largest_newly_acked = self.newly_acked.last().unwrap();
 
@@ -1117,41 +1123,6 @@ impl RecoveryOps for GRecovery {
         self.last_ack_time = Some(now);
         if update_rtt {
             let latest_rtt = now - largest_newly_acked.time_sent;
-            let logging_values = vec![
-                format!("acked_bytes: {acked_bytes}"),
-                format!("last_ack_time: {:?}", self.last_ack_time),
-                format!("skip_pn: {skip_pn_unwrapped}"),
-                format!("prior_in_flight: {prior_in_flight}"),
-                format!(
-                    "bytes_in_flight:{:?}",
-                    self.bytes_in_flight.bytes_in_flight
-                ),
-                format!("latest_rtt[ms]:{:?}", latest_rtt.as_millis()),
-                format!(
-                    "largest_newly_acked.time_send[ms]: {:?}",
-                    largest_newly_acked.time_sent.elapsed().as_millis()
-                ),
-                format!(
-                    "largest_newly_acked.time_received[ms]: {:?}",
-                    largest_newly_acked.delivered_time.elapsed().as_millis()
-                ),
-                format!("event_time [ms]: {:?}", now.elapsed().as_millis()),
-                format!(
-                    "last ack timestamp [ms]: {:?}",
-                    self.newly_acked
-                        .last()
-                        .unwrap()
-                        .delivered_time
-                        .elapsed()
-                        .as_millis()
-                ),
-                format!("ack_delay [ms]: {ack_delay}"),
-            ];
-            // self.write_to_log(
-            //    "ACK_RECEIVED".to_owned(),
-            //    logging_values,
-            //    self.logged_rows,
-            //);
             self.rtt_stats.update_rtt(
                 latest_rtt,
                 Duration::from_micros(ack_delay),

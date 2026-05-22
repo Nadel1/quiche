@@ -78,6 +78,7 @@ impl TestSender {
         &mut self, bytes: usize, epoch: packet::Epoch,
         handshake_status: HandshakeStatus,
     ) {
+        println!("sent num: {:?}, size: {:?}", self.next_pkt, bytes);
         let sent = Sent {
             pkt_num: self.next_pkt,
             frames: Default::default(),
@@ -93,7 +94,7 @@ impl TestSender {
             is_app_limited: false,
             tx_in_flight: 0,
             lost: 0,
-            has_data: false,
+            has_data: true,
             is_pmtud_probe: false,
         };
 
@@ -136,8 +137,9 @@ impl TestSender {
     ) {
         let mut acked = Vec::new();
         let mut range = RangeSet::new(n);
-        for r in 0..n {
+        for _ in 0..n {
             let unacked = self.sent_packets.pop_front().unwrap();
+            println!("ack num: {:?}, size: {:?}", unacked.pkt_num, unacked.size);
             acked.push(Acked {
                 pkt_num: unacked.pkt_num,
                 time_sent: unacked.time_sent,
@@ -149,7 +151,6 @@ impl TestSender {
                 first_sent_time: unacked.first_sent_time,
                 is_app_limited: unacked.is_app_limited,
             });
-            println!("acked len: {:?}", acked.len());
             range.push_item(unacked.pkt_num as u64);
             self.next_ack += 1;
         }
