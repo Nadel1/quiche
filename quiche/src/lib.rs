@@ -396,10 +396,6 @@ use std::sync::Arc;
 use std::time::Duration;
 use std::time::Instant;
 
-use std::fs::File;
-use std::time::SystemTime;
-use std::time::UNIX_EPOCH;
-
 #[cfg(feature = "qlog")]
 use qlog::events::connectivity::ConnectivityEventType;
 #[cfg(feature = "qlog")]
@@ -7744,28 +7740,6 @@ impl<F: BufFactory> Connection<F> {
         epoch: packet::Epoch, now: Instant,
     ) -> Result<()> {
         trace!("{} rx frm {:?}", self.trace_id, frame);
-
-        let path: &mut path::Path = self.paths.get_mut(recv_path_id)?;
-        // It's fine to set the skip counter based on a non-active path's values.
-        //let cwnd = path.recovery.cwnd();
-        //let max_bw=path.recovery.max_bandwidth().unwrap().bits_per_second as u128;
-        //let rtt = path.recovery.rtt().as_micros();
-        //let bytes_in_flight = path.recovery.bytes_in_flight();
-        //let lost_count=path.recovery.lost_count();
-//
-//
-        //let mut logging_values = vec![
-        //    hdr.pkt_num as u128,
-        //    0 as u128,//makes evaluation easier later on
-        //    cwnd as u128,
-        //    bytes_in_flight as u128,
-        //    rtt as u128,
-        //    path.recovery.pto().as_micros(),
-        //    path.recovery.rttvar().as_micros(),
-        //    max_bw,
-        //    lost_count as u128,
-        //    
-        //];
         
         match frame {
             frame::Frame::Padding { .. } => (),

@@ -280,14 +280,14 @@ impl Resume {
                     },
                 };
                 // Confirm RTT is similar to that of the saved connection
-                //if current_rtt <= self.saved_rtt / 2 {
-                //    println!(
-                //    "current RTT too divergent from saved RTT - not using careful resume; \
-                //    rtt_sample={:?} saved_rtt={:?}",
-                //    current_rtt, self.saved_rtt
-                //);
-                //    self.change_state(CrState::Normal);
-                //}
+                if current_rtt <= self.saved_rtt / 2 {
+                    println!(
+                    "current RTT too divergent from saved RTT - not using careful resume; \
+                    rtt_sample={:?} saved_rtt={:?}",
+                    current_rtt, self.saved_rtt
+                );
+                    self.change_state(CrState::Normal);
+                }
                 println!("changing state too early in send packet");
                 self.change_state(CrState::Unvalidated(largest_pkt_sent));
                 self.in_state_timer = Instant::now();

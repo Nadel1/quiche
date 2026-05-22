@@ -43,7 +43,6 @@ use crate::StartupExit;
 use crate::StartupExitReason;
 
 const SAVED_CC_FILE: &str = "saved_params.csv";
-pub const PACING_MULTIPLIER: f64 = 1.25;
 
 pub struct SsThresh {
     // Current slow start threshold.  Defaults to usize::MAX which

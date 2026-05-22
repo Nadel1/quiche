@@ -1,5 +1,4 @@
 use crate::packet;
-use crate::recovery;
 use crate::recovery::resume::CrState;
 use crate::recovery::OnLossDetectionTimeoutOutcome;
 use crate::recovery::INITIAL_TIME_THRESHOLD_OVERHEAD;
@@ -67,7 +66,6 @@ impl std::fmt::Display for SentPacket {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let _ = match &self.status {
             SentStatus::Sent {
-                time_sent,
                 in_flight,
                 sent_bytes,
                 frames,
@@ -506,8 +504,6 @@ pub struct GRecovery {
 
     pub(crate) pacer: Pacer,
     pub(crate) resume: resume::Resume,
-    logging_name: String,
-    logged_rows: i64,
     // Tracks when the last ACK was processed, approximating when
     // bytes_in_flight transitioned toward zero.
     last_ack_time: Option<Instant>,
@@ -587,8 +583,6 @@ impl GRecovery {
             newly_acked: Vec::new(),
             lost_reuse: Vec::new(),
             resume: resume::Resume::new(SAVED_CC_FILE),
-            logging_name: recovery_config.logging_name.clone().to_owned(),
-            logged_rows: 0,
             last_ack_time: None,
         })
     }
@@ -753,65 +747,6 @@ impl GRecovery {
     fn is_app_limited(&self) -> bool {
         self.pacer.get_app_limited()
     }
-
-    fn write_to_log(
-        &mut self, sent_from: String, logging_values: Vec<String>,
-        mut logged_rows: i64,
-    ) {
-        use std::io::Write;
-        if self.logging_name == "" {
-            return;
-        }
-        let mut file = File::options()
-            .append(true)
-            .open(self.logging_name.clone())
-            .unwrap();
-        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH);
-        let mut save_string = timestamp.unwrap().as_secs().to_string().to_owned();
-        save_string.push_str(",");
-        save_string.push_str(&sent_from);
-
-        let vec_iter = logging_values.iter();
-        for val in vec_iter {
-            save_string.push_str(",");
-            save_string.push_str(&val);
-        }
-        save_string.push_str("\n");
-
-        if self.logged_rows < 100 {
-            self.logged_rows += 1;
-            let _ = file.write_all(save_string.as_bytes());
-        }
-    }
-
-    fn write_to_log_vec(
-        &self, sent_from: String, logging_values: &VecDeque<SentPacket>,
-        mut logged_rows: i64,
-    ) {
-        use std::io::Write;
-        if self.logging_name == "" {
-            return;
-        }
-        let mut file = File::options()
-            .append(true)
-            .open(self.logging_name.clone())
-            .unwrap();
-        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH);
-        let mut save_string = timestamp.unwrap().as_secs().to_string().to_owned();
-        save_string.push_str(",");
-        save_string.push_str(&sent_from);
-
-        let vec_iter = logging_values.iter();
-        for val in vec_iter {
-            save_string.push_str(",");
-            save_string.push_str(&val.to_string());
-        }
-        save_string.push_str("\n");
-
-        if logged_rows < 10 {
-            let _ = file.write_all(save_string.as_bytes());
-        }
-    }
 }
 
 impl RecoveryOps for GRecovery {
@@ -870,7 +805,7 @@ impl RecoveryOps for GRecovery {
         {
             let bytes_acked = self.resume.total_acked;
             let iw_acked = bytes_acked >= self.pacer.get_initial_cwnd();
-            let state_str = self.state_str(now);
+            let _state_str = self.state_str(now);
             // Increase the congestion window by a jump determined by careful
             // resume
             self.pacer.set_congestion_window(self.resume.send_packet(
@@ -1056,7 +991,7 @@ impl RecoveryOps for GRecovery {
                     .map(|p| p.pkt_num)
                     .max()
                     .unwrap_or_default();
-                let (new_cwnd, new_ssthresh) = self.resume.process_ack(
+                let (new_cwnd, _) = self.resume.process_ack(
                     largest_sent_pkt,
                     packet,
                     self.bytes_in_flight.get(),
@@ -1070,7 +1005,6 @@ impl RecoveryOps for GRecovery {
         }
 
         let prior_in_flight = self.bytes_in_flight.get();
-        let sent_packets = &self.epochs[epoch].sent_packets;
         let AckedDetectionResult {
             acked_bytes,
             spurious_losses,
@@ -1082,7 +1016,6 @@ impl RecoveryOps for GRecovery {
             skip_pn,
             trace_id,
         )?;
-        let skip_pn_unwrapped = skip_pn.unwrap_or(0);
 
         self.lost_spurious_count += spurious_losses;
         if let Some(thresh) = spurious_pkt_thresh {

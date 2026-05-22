@@ -36,7 +36,6 @@ use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 
 use crate::recovery::gcongestion::bbr::BandwidthSampler;
-use crate::recovery::gcongestion::bbr2::mode::CyclePhase;
 use crate::recovery::gcongestion::bbr2::Params;
 use crate::recovery::gcongestion::Bandwidth;
 use crate::recovery::gcongestion::Lost;
@@ -288,15 +287,6 @@ impl BBRv2NetworkModel {
         (bandwidth * gain).to_bytes_per_period(self.min_rtt()) as usize
     }
 
-    pub(super) fn set_total_acked_bytes(&mut self, total_bytes_acked: usize) {
-        self.bandwidth_sampler
-            .set_total_acked_bytes(total_bytes_acked);
-    }
-
-    pub(super) fn get_total_acked_bytes(&self) -> usize {
-        self.bandwidth_sampler.get_total_acked_bytes()
-    }
-
     pub(super) fn bdp1(&self, bandwidth: Bandwidth) -> usize {
         self.bdp(bandwidth, 1.0)
     }
@@ -315,10 +305,6 @@ impl BBRv2NetworkModel {
 
     pub(super) fn max_bandwidth(&self) -> Bandwidth {
         self.max_bandwidth_filter.get()
-    }
-
-    pub fn min_bytes_in_flight_in_round(&self) -> usize {
-        self.min_bytes_in_flight_in_round
     }
 
     pub fn write_to_log(&mut self, logging_values: Vec<String>) {
@@ -348,14 +334,6 @@ impl BBRv2NetworkModel {
         &mut self, sent_time: Instant, bytes_in_flight: usize,
         packet_number: u64, bytes: usize, is_retransmissible: bool,
     ) {
-        let logging_values = vec![
-            format!("sent_time [ms]: {:?}", sent_time.elapsed().as_millis()),
-            format!("bytes_in_flight: {bytes_in_flight}"),
-            format!("packet_number: {packet_number}"),
-            format!("bytes: {bytes}"),
-            format!("min_rtt: {:?} [ms]", self.min_rtt().as_millis()),
-        ];
-        // self.write_to_log(logging_values, self.logged_rows);
         // Updating the min here ensures a more realistic (0) value when flows
         // exit quiescence.
         self.min_bytes_in_flight_in_round =
@@ -645,28 +623,6 @@ impl BBRv2NetworkModel {
             return false;
         }
 
-        let logging_values = vec![
-            format!(
-                "congestion_event event_time: {:?}",
-                congestion_event.event_time
-            ),
-            format!(
-                "comparing to: {:?}",
-                (self.min_rtt_filter.min_rtt_timestamp + params.probe_rtt_period)
-            ),
-            format!(
-                "would set min_rtt value to {:?} s",
-                congestion_event.sample_min_rtt.unwrap()
-            ),
-            format!(
-                "would return false: {:?}",
-                congestion_event.event_time <
-                    self.min_rtt_filter.min_rtt_timestamp +
-                        params.probe_rtt_period
-            ),
-        ];
-        // self.write_to_log(logging_values);
-
         if congestion_event.event_time <
             self.min_rtt_filter.min_rtt_timestamp + params.probe_rtt_period
         {
@@ -882,10 +838,6 @@ impl BBRv2NetworkModel {
 
     pub(super) fn loss_events_in_round(&self) -> usize {
         self.loss_events_in_round
-    }
-
-    pub(super) fn set_loss_events_in_round(&mut self, loss_events: usize) {
-        self.loss_events_in_round = loss_events;
     }
 
     pub(super) fn rounds_with_queueing(&self) -> usize {

@@ -421,10 +421,6 @@ fn rollback(r: &mut Congestion) -> bool {
     true
 }
 
-fn has_custom_pacing() -> bool {
-    false
-}
-
 #[cfg(feature = "qlog")]
 fn state_str(r: &Congestion, now: Instant) -> &'static str {
     reno::state_str(r, now)

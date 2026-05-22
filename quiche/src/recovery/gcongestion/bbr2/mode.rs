@@ -168,10 +168,10 @@ impl Default for Mode {
 impl fmt::Display for Mode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Mode::Startup(Startup { model }) => write!(f, "Startup"),
-            Mode::Drain(Drain { model, .. }) => write!(f, "Drain"),
-            Mode::ProbeBW(ProbeBW { model, .. }) => write!(f, "ProbeBW"),
-            Mode::ProbeRTT(ProbeRTT { model, .. }) => write!(f, "ProbeRTT"),
+            Mode::Startup(_) => write!(f, "Startup"),
+            Mode::Drain(_) => write!(f, "Drain"),
+            Mode::ProbeBW(_) => write!(f, "ProbeBW"),
+            Mode::ProbeRTT(_) => write!(f, "ProbeRTT"),
             Mode::Placheolder(_) => unreachable!(),
         }
 

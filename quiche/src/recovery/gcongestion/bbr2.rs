@@ -36,16 +36,12 @@ mod probe_rtt;
 mod startup;
 
 use std::cmp;
-use std::fs::File;
 use std::time::Duration;
 use std::time::Instant;
-use std::time::SystemTime;
-use std::time::UNIX_EPOCH;
 
 use network_model::BBRv2NetworkModel;
 
 use crate::recovery::gcongestion::Bandwidth;
-use crate::recovery::rtt;
 use crate::recovery::RecoveryStats;
 
 use self::mode::Mode;
@@ -212,8 +208,6 @@ struct Params {
     /// 1/8th of an RTT into the future, so the error introduced by
     /// setting `time_sent` to `now` is bounded.
     time_sent_set_to_now: bool,
-
-    carefully_resuming: bool,
 }
 
 impl Params {
@@ -354,8 +348,6 @@ const DEFAULT_PARAMS: Params = Params {
     disable_probe_down_early_exit: false,
 
     time_sent_set_to_now: true,
-
-    carefully_resuming: false,
 };
 
 #[derive(Debug, PartialEq)]
@@ -452,8 +444,6 @@ pub(crate) struct BBRv2 {
     last_sent_time: Option<Instant>,
 
     params: Params,
-    logging_name: String,
-    logged_rows: i64,
 }
 
 struct BBRv2CongestionEvent {
@@ -544,11 +534,9 @@ impl BBRv2 {
             last_quiescence_start: None,
             mss: max_segment_size,
             params,
-            logged_rows: 0,
             last_sent_time: None,
             last_ack_time: None,
             idle_start: None,
-            logging_name: logging_name.clone(),
         }
     }
 
@@ -883,7 +871,6 @@ mod tests {
         // congestion_recovery_start_time into the future on every
         // send -> ACK -> send cycle when bif transiently hits 0.
         let mut sender = test_sender();
-        let initial_cwnd = sender.cc.cwnd();
         let size = MAX_DATAGRAM_SIZE;
         let rtt = Duration::from_millis(1000);
 
@@ -910,7 +897,6 @@ mod tests {
         // Now simulate the problematic pattern: send a small burst at
         // minimum cwnd, ACK it (bif drops to 0), advance one RTT, repeat. --> bif
         // at 0
-        let packets_per_burst = 1;
 
         sender.send_packet(
             size,
