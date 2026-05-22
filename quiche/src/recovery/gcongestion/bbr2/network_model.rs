@@ -194,26 +194,12 @@ pub(super) struct BBRv2NetworkModel {
     latest_send_rate: Option<Bandwidth>,
     /// The most recent ack rate from the BandwidthSampler.
     latest_ack_rate: Option<Bandwidth>,
-    logging_name: String,
-    logged_rows: i64,
 }
 
 impl BBRv2NetworkModel {
     pub(super) fn new(
-        params: &Params, initial_rtt: Duration, logging_name: String,
+        params: &Params, initial_rtt: Duration
     ) -> Self {
-        if logging_name != "" {
-            File::create(logging_name.clone()).unwrap();
-
-            use std::io::Write; // has to be included here, otherwise issues with other write calls
-            let mut file = File::options()
-                .append(true)
-                .open(logging_name.clone())
-                .unwrap();
-
-            let save_string = "TIMESTAMP,\n";
-            let _ = file.write_all(save_string.as_bytes());
-        }
         BBRv2NetworkModel {
             min_bytes_in_flight_in_round: usize::MAX,
             inflight_hi_limited_in_round: false,
@@ -257,8 +243,6 @@ impl BBRv2NetworkModel {
 
             latest_send_rate: None,
             latest_ack_rate: None,
-            logging_name,
-            logged_rows: 0,
         }
     }
 
@@ -305,29 +289,6 @@ impl BBRv2NetworkModel {
 
     pub(super) fn max_bandwidth(&self) -> Bandwidth {
         self.max_bandwidth_filter.get()
-    }
-
-    pub fn write_to_log(&mut self, logging_values: Vec<String>) {
-        use std::io::Write;
-
-        if self.logging_name == "" {
-            return;
-        }
-        let mut file = File::options()
-            .append(true)
-            .open(self.logging_name.clone())
-            .unwrap();
-        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH);
-        let mut save_string = timestamp.unwrap().as_secs().to_string().to_owned();
-        let vec_iter = logging_values.iter();
-        for val in vec_iter {
-            save_string.push_str(",");
-            save_string.push_str(&val);
-        }
-        save_string.push_str("\n");
-
-        let _ = file.write_all(save_string.as_bytes());
-        self.logged_rows += 1;
     }
 
     pub(super) fn on_packet_sent(
@@ -408,17 +369,6 @@ impl BBRv2NetworkModel {
         if let Some(rtt_sample) = sample.sample_rtt {
             congestion_event.sample_min_rtt = Some(rtt_sample);
             self.min_rtt_filter.update(rtt_sample, event_time);
-            let logging_values = vec![
-                format!(
-                    "updated min_rtt_value: {:?} ms",
-                    self.min_rtt_filter.get().as_millis()
-                ),
-                format!(
-                    "updated min_rtt_timestamp: {:?}",
-                    self.min_rtt_filter.min_rtt_timestamp
-                ),
-            ];
-            self.write_to_log(logging_values);
         }
 
         self.latest_send_rate = sample.sample_max_send_rate;
@@ -820,14 +770,6 @@ impl BBRv2NetworkModel {
     }
 
     pub(super) fn postpone_min_rtt_timestamp(&mut self, duration: Duration) {
-        let logging_values = vec![
-            format!(
-                "postponing_min_rtt_time_stamp to: {:?}",
-                self.min_rtt_timestamp().add(duration).elapsed().as_millis()
-            ),
-            format!("adding: {:?}", duration.as_millis()),
-        ];
-        self.write_to_log(logging_values);
         self.min_rtt_filter
             .force_update(self.min_rtt(), self.min_rtt_timestamp().add(duration));
     }

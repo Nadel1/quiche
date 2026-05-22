@@ -106,9 +106,6 @@ impl ModeImpl for ProbeBW {
                 self.cycle.rounds_in_phase += 1;
             }
         }
-
-        let logging_values = vec![format!("phase: {:?}", self.cycle.phase)];
-        self.model.write_to_log(logging_values);
         let mut switch_to_probe_rtt = false;
 
         match self.cycle.phase {
@@ -663,8 +660,7 @@ mod tests {
         let params = &DEFAULT_PARAMS;
         let model = BBRv2NetworkModel::new(
             params,
-            Duration::from_millis(333),
-            "".to_owned(),
+            Duration::from_millis(333)
         );
         let mut probe_bw = ProbeBW { model, cycle };
         let cwnd = MAX_DATAGRAM_SIZE;
@@ -740,8 +736,7 @@ mod tests {
         let params = &DEFAULT_PARAMS;
         let model = BBRv2NetworkModel::new(
             params,
-            Duration::from_millis(333),
-            "".to_owned(),
+            Duration::from_millis(333)
         );
         let cycle = Cycle::default();
         let mut probe_bw = ProbeBW { model, cycle };

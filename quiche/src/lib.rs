@@ -387,6 +387,7 @@ use std::cmp;
 
 use std::collections::VecDeque;
 
+use std::fs::File;
 use std::net::SocketAddr;
 
 use std::str::FromStr;
@@ -395,6 +396,8 @@ use std::sync::Arc;
 
 use std::time::Duration;
 use std::time::Instant;
+use std::time::SystemTime;
+use std::time::UNIX_EPOCH;
 
 #[cfg(feature = "qlog")]
 use qlog::events::connectivity::ConnectivityEventType;
@@ -2046,7 +2049,17 @@ impl<F: BufFactory> Connection<F> {
             max_amplification_factor: config.max_amplification_factor,
             logging_name: config.logging_name.clone(),
         };
+        if config.logging_name != "" {
+            File::create(config.logging_name.clone()).unwrap();
 
+            use std::io::Write; // has to be included here, otherwise issues with other write calls
+            let mut file = File::options()
+                .append(true)
+                .open(config.logging_name.clone())
+                .unwrap();
+            let save_string = "TIMESTAMP,SENT/RECEIVED,PACKET_NUM,PACKET_SIZE,CWND,BYTES_IN_FLIGHT,RTT,PTO\n";
+            let _ = file.write_all(save_string.as_bytes());
+        }
         if let Some(retry_cids) = retry_cids {
             conn.local_transport_params
                 .original_destination_connection_id =
@@ -2248,7 +2261,31 @@ impl<F: BufFactory> Connection<F> {
         self.encode_transport_params()
     }
 
-
+    pub fn write_to_log(&self, sent: bool, logging_values: Vec<u128>) {
+        use std::io::Write;
+        if self.logging_name == "" {
+            return;
+        }
+        let mut file = File::options()
+            .append(true)
+            .open(self.logging_name.clone())
+            .unwrap();
+        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH);
+        let mut save_string = timestamp.unwrap().as_secs().to_string().to_owned();
+        save_string.push_str(",");
+        if sent {
+            save_string.push_str("SENT");
+        } else {
+            save_string.push_str("RECEIVED");
+        }
+        let vec_iter = logging_values.iter();
+        for val in vec_iter {
+            save_string.push_str(",");
+            save_string.push_str(&val.to_string());
+        }
+        save_string.push_str("\n");
+        let _ = file.write_all(save_string.as_bytes());
+    }
 
     /// Sets the congestion control algorithm used.
     ///
@@ -3578,7 +3615,21 @@ impl<F: BufFactory> Connection<F> {
 
         self.ack_eliciting_sent = false;
 
-        
+        let path = self.paths.get_mut(recv_pid)?;
+        // It's fine to set the skip counter based on a non-active path's values.
+        let cwnd = path.recovery.cwnd();
+        let rtt = path.recovery.rtt().as_micros();
+        let bytes_in_flight = path.recovery.bytes_in_flight();
+        let logging_values = vec![
+            pn as u128,
+            read as u128,
+            cwnd as u128,
+            bytes_in_flight as u128,
+            rtt as u128,
+            path.recovery.pto().as_micros(),
+            path.recovery.rttvar().as_micros(),
+        ];
+        self.write_to_log(false, logging_values);
 
         Ok(read)
     }
@@ -5122,6 +5173,24 @@ impl<F: BufFactory> Connection<F> {
         if ack_eliciting {
             self.ack_eliciting_sent = true;
         }
+
+        let active_path = self.paths.get_active_mut()?;
+        let cwnd = active_path.recovery.cwnd();
+
+        let rtt = active_path.recovery.rtt().as_micros();
+        let bytes_in_flight = active_path.recovery.bytes_in_flight();
+
+        let logging_values = vec![
+            pn as u128,
+            if ack_eliciting { written } else { 0 } as u128,
+            cwnd as u128,
+            bytes_in_flight as u128,
+            rtt as u128,
+            active_path.recovery.pto().as_micros(),
+            active_path.recovery.rttvar().as_micros(),
+            active_path.recovery.pto().as_micros(),
+        ];
+        self.write_to_log(true, logging_values);
 
         Ok((pkt_type, written))
     }
@@ -7740,7 +7809,7 @@ impl<F: BufFactory> Connection<F> {
         epoch: packet::Epoch, now: Instant,
     ) -> Result<()> {
         trace!("{} rx frm {:?}", self.trace_id, frame);
-        
+
         match frame {
             frame::Frame::Padding { .. } => (),
 
@@ -7769,8 +7838,8 @@ impl<F: BufFactory> Connection<F> {
                 let largest_acked = ranges.last().expect(
                     "ACK frames should always have at least one ack range",
                 );
-                //logging_values.push(ack_delay as u128);
-                //logging_values.push(is_app_limited as u128);
+                // logging_values.push(ack_delay as u128);
+                // logging_values.push(is_app_limited as u128);
 
                 for (_, p) in self.paths.iter_mut() {
                     if self.pkt_num_spaces[epoch]
@@ -7787,7 +7856,7 @@ impl<F: BufFactory> Connection<F> {
                     if is_app_limited {
                         p.recovery.delivery_rate_update_app_limited(true);
                     }
-                    
+
                     let OnAckReceivedOutcome {
                         lost_packets,
                         lost_bytes,

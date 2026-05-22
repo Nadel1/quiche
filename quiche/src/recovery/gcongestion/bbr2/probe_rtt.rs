@@ -166,7 +166,7 @@ mod tests {
         };
         let params = &DEFAULT_PARAMS.with_overrides(&custom_bbr_settings);
 
-        let model = BBRv2NetworkModel::new(params, Duration::from_millis(333),"".to_string());
+        let model = BBRv2NetworkModel::new(params, Duration::from_millis(333));
         let mut probe_rtt = ProbeRTT::new(model, Cycle::default());
         probe_rtt.enter(Instant::now(), None, params);
         assert_eq!(probe_rtt.model.pacing_gain(), 0.8);

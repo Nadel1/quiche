@@ -506,7 +506,7 @@ impl BBRv2 {
     pub fn new(
         initial_congestion_window: usize, max_congestion_window: usize,
         max_segment_size: usize, smoothed_rtt: Duration,
-        custom_bbr_params: Option<&BbrParams>, logging_name: String,
+        custom_bbr_params: Option<&BbrParams>
     ) -> Self {
         let cwnd = initial_congestion_window * max_segment_size;
 
@@ -520,7 +520,6 @@ impl BBRv2 {
             mode: Mode::startup(BBRv2NetworkModel::new(
                 &params,
                 smoothed_rtt,
-                logging_name.clone(),
             )),
             cwnd,
             pacing_rate: initial_pacing_rate(cwnd, smoothed_rtt, &params),
@@ -1000,8 +999,7 @@ mod tests {
             MAX_WINDOW_PACKETS,
             INIT_PACKET_SIZE,
             initial_rtt,
-            Some(bbr_params),
-            "".to_string(),
+            Some(bbr_params)
         );
 
         assert_eq!(bbr2.cwnd_limits.lo, INIT_CWND);
