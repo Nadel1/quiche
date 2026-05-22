@@ -534,11 +534,9 @@ impl BandwidthSampler {
         &mut self, sent_time: Instant, packet_number: u64, bytes: usize,
         bytes_in_flight: usize, has_retransmittable_data: bool,
     ) {
-        println!("bandwidth sampler: on_packet_sent");
         self.last_sent_packet = packet_number;
 
         if !has_retransmittable_data {
-            println!("bandwidth sampler: has not retransmittble data");
             return;
         }
 
@@ -573,7 +571,6 @@ impl BandwidthSampler {
             packet_number,
             (sent_time, bytes, bytes_in_flight + bytes, &*self).into(),
         );
-        println!("bandwidth sampler: inserted: {:?}", packet_number);
     }
 
     pub(crate) fn on_packet_neutered(&mut self, packet_number: u64) {
@@ -610,7 +607,6 @@ impl BandwidthSampler {
         }
 
         let mut event_sample = CongestionEventSample::default();
-        println!("in bandwidth sampler: on_congestion_event");
 
         let mut max_send_rate = None;
         let mut max_ack_rate = None;
@@ -741,12 +737,7 @@ impl BandwidthSampler {
         &mut self, ack_time: Instant, packet_number: u64,
     ) -> Option<BandwidthSample> {
         self.last_acked_packet = packet_number;
-        println!(
-            "in bandwidth sampler: on_packet_acknowledged, last_acked_packet: {:?}, total_bytes_acked: {:?}",
-            self.last_acked_packet,self.total_bytes_acked
-        );
         let sent_packet = self.connection_state_map.take(packet_number)?;
-        println!("take sent packet");
         self.total_bytes_acked += sent_packet.size;
         self.total_bytes_sent_at_last_acked_packet =
             sent_packet.send_time_state.total_bytes_sent;
@@ -781,7 +772,6 @@ impl BandwidthSampler {
                 sent_packet.sent_time - sent_packet.last_acked_packet_sent_time,
             ))
         } else {
-            println!("retrn bc of send rate");
             None
         };
 

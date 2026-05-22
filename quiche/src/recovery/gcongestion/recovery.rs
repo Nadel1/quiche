@@ -1098,14 +1098,6 @@ impl RecoveryOps for GRecovery {
         }
 
         self.bytes_in_flight.saturating_subtract(acked_bytes, now);
-        println!(
-            "on_ack_received: previous bytes in flight: {:?}",
-            prior_in_flight
-        );
-        println!(
-            "on_ack_received: bytes_in_flight: {:?}, acked_bytes: {:?}",
-            self.bytes_in_flight.bytes_in_flight, acked_bytes
-        );
 
         let largest_newly_acked = self.newly_acked.last().unwrap();
 
@@ -1133,7 +1125,6 @@ impl RecoveryOps for GRecovery {
 
         let (lost_bytes, lost_packets) =
             self.detect_and_remove_lost_packets(epoch, now);
-        println!("on_ack_received: {:?}", self.newly_acked.len());
         self.pacer.on_congestion_event(
             update_rtt,
             prior_in_flight,

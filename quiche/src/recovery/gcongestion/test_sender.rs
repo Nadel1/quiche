@@ -78,7 +78,6 @@ impl TestSender {
         &mut self, bytes: usize, epoch: packet::Epoch,
         handshake_status: HandshakeStatus,
     ) {
-        println!("sent num: {:?}, size: {:?}", self.next_pkt, bytes);
         let sent = Sent {
             pkt_num: self.next_pkt,
             frames: Default::default(),
@@ -102,7 +101,7 @@ impl TestSender {
             sent.clone(),
             epoch,
             handshake_status,
-            Instant::now(),
+            self.time,
             &"".to_owned(),
         );
 
@@ -131,15 +130,13 @@ impl TestSender {
     }
 
     pub(crate) fn ack_n_packets(
-        &mut self, n: usize, bytes: usize, now: Instant, ack_delay: u64,
-        epoch: packet::Epoch, handshake_status: HandshakeStatus,
-        skip_pn: Option<u64>,
+        &mut self, n: usize, bytes: usize, ack_delay: u64, epoch: packet::Epoch,
+        handshake_status: HandshakeStatus, skip_pn: Option<u64>,
     ) {
         let mut acked = Vec::new();
         let mut range = RangeSet::new(n);
         for _ in 0..n {
             let unacked = self.sent_packets.pop_front().unwrap();
-            println!("ack num: {:?}, size: {:?}", unacked.pkt_num, unacked.size);
             acked.push(Acked {
                 pkt_num: unacked.pkt_num,
                 time_sent: unacked.time_sent,
@@ -159,7 +156,7 @@ impl TestSender {
             ack_delay,
             epoch,
             handshake_status,
-            now,
+            self.time,
             skip_pn,
             &"".to_ascii_lowercase(),
         );
