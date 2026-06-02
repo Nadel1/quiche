@@ -77,11 +77,12 @@ impl Config {
                     .ok()
             } else {
                 log::warn!("SSLKEYLOGFILE is set, but `--cfg capture_keylogs` was not enabled. No keys will be logged.");
-               File::options().create(true).append(true).open(path)
+                File::options().create(true).append(true).open(path)
                     .inspect_err(|e| log::warn!("failed to open SSLKEYLOGFILE"; "error" => e))
                     .ok()
                 //None
             });
+        println!("keylog_file: {:?}",keylog_file);
 
         let SocketCapabilities {
             has_gso,
