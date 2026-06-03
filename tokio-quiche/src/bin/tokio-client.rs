@@ -115,8 +115,7 @@ async fn main() -> tokio_quiche::QuicResult<()> {
                     println!("fin received");
                     break;
                 },
-                ClientH3Event::Core(event) =>
-                    println!("received event: {event:?}"),
+                ClientH3Event::Core(event) =>{},
                 ClientH3Event::NewOutboundRequest {
                     stream_id,
                     request_id,
