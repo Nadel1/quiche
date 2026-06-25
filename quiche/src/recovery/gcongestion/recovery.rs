@@ -804,7 +804,7 @@ impl RecoveryOps for GRecovery {
         {
             let bytes_acked = self.resume.total_acked;
             let iw_acked = bytes_acked >= self.pacer.get_initial_cwnd();
-            let _state_str = self.state_str(now);
+            
             // Increase the congestion window by a jump determined by careful
             // resume
             self.pacer.set_congestion_window(self.resume.send_packet(
@@ -1124,6 +1124,9 @@ impl RecoveryOps for GRecovery {
                         );
                     },
                 }
+                self.resume
+                .congestion_event(self.lost_reuse.get(0).unwrap().packet_number);
+
             } else {
                 // this method also updates the cwnd
                 self.pacer.on_congestion_event(
@@ -1140,9 +1143,7 @@ impl RecoveryOps for GRecovery {
                 );
             }
 
-            self.resume
-                .congestion_event(self.lost_reuse.get(0).unwrap().packet_number);
-
+            
             self.lost_count += lost_packets;
 
             self.set_loss_detection_timer(handshake_status, now);
@@ -1411,10 +1412,6 @@ impl RecoveryOps for GRecovery {
         true
     }
 
-    fn state_str(&self, _now: Instant) -> &'static str {
-        self.pacer.state_str()
-    }
-
     #[cfg(feature = "qlog")]
     fn get_updated_qlog_event_data(&mut self) -> Option<EventData> {
         let qlog_metrics = QlogMetrics {
@@ -1467,6 +1464,11 @@ impl RecoveryOps for GRecovery {
             .to_bytes_per_period(ReleaseDecision::EQUAL_THRESHOLD)
             .min(64 * 1024)
             .max(floor as u64) as usize
+    }
+    
+    #[cfg(feature = "qlog")]
+    fn state_str(&self,now: Instant) ->  &'static str {
+        todo!()
     }
 }
 

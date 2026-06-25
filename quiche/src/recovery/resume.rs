@@ -55,7 +55,7 @@ impl Resume {
     pub fn new(file_name: &str) -> Self {
         // enabled will become false if either of the required CR ENV VARS is not
         // supplied
-        let mut enabled = true;
+        let mut enabled = false;
         let mut saved_rtt = Duration::from_secs(u64::MAX);
 
         let mut saved_cwnd = 0;
