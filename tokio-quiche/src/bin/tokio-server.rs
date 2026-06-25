@@ -33,6 +33,7 @@ async fn main() -> tokio_quiche::QuicResult<()> {
     settings.max_idle_timeout = Some(Duration::from_millis(args.idle_timeout));
     settings.cc_algorithm = conn_args.cc_algorithm;
     println!("Set max idle timeout: {:?}", settings.max_idle_timeout);
+    println!("cert: {:?}, key: {:?}", args.cert, args.key);
     let mut listeners = listen(
         [socket],
         ConnectionParams::new_server(
@@ -46,7 +47,6 @@ async fn main() -> tokio_quiche::QuicResult<()> {
         ),
         DefaultMetrics,
     )?;
-
     let accept_stream = &mut listeners[0];
 
     while let Some(conn) = accept_stream.next().await {
