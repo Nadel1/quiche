@@ -38,11 +38,14 @@
             buildAndTestSubdir = [ path ];
             nativeBuildInputs = with pkgs; [
               cmake # for boringssl
+              git # for boring-sys to apply patches
               pkg-config # for qlog-dancer
+              clang # for boring-sys bindgen
             ];
             buildInputs = with pkgs; [
               fontconfig # for qlog-dancer
             ];
+            LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
           };
         # does not compile currently
         qlogDancerWeb =
@@ -77,19 +80,9 @@
       in
       {
         packages = {
-          apps = buildRustPackage "quiche_apps" "apps";
-          buffer-pool = buildRustPackage "buffer-pool" "buffer-pool";
-          datagram-socket = buildRustPackage "datagram-socket" "datagram-socket";
-          h3i = buildRustPackage "h3i" "h3i";
-          netlog = buildRustPackage "netlog" "netlog";
-          octets = buildRustPackage "octets" "octets";
-          qlog = buildRustPackage "qlog" "qlog";
-          qlog-dancer = buildRustPackage "qlog-dancer" "qlog-dancer";
-          qlog-dancer-web = qlogDancerWeb;
-          quiche = buildRustPackage "quiche" "quiche";
-          task-killswitch = buildRustPackage "task-killswitch" "task-killswitch";
+
           tokio-quiche = buildRustPackage "tokio-quiche" "tokio-quiche";
-          default = self.packages.${system}.quiche;
+          default = self.packages.${system}.tokio-quiche;
         };
         devShells.default =
           let
