@@ -1,6 +1,7 @@
 // Based on: https://github.com/ana-cc/quiche/blob/resume_latest/quiche/src/recovery/congestion/resume.rs (11.08.2025)
 
 use crate::recovery::Acked;
+use std::env;
 use std::time::Duration;
 use std::time::Instant;
 use std::time::SystemTime;
@@ -55,7 +56,7 @@ impl Resume {
     pub fn new(file_name: &str) -> Self {
         // enabled will become false if either of the required CR ENV VARS is not
         // supplied
-        let mut enabled = false;
+        let mut enabled = env::var("CAREFUL_RESUME").is_ok();
         let mut saved_rtt = Duration::from_secs(u64::MAX);
 
         let mut saved_cwnd = 0;
