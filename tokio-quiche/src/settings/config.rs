@@ -226,6 +226,7 @@ fn make_quiche_config(
 fn quiche_config_with_tls(
     tls_cert: Option<TlsCertificatePaths>,
 ) -> QuicResult<quiche::Config> {
+    println!("tls_cert: {:?}",tls_cert);
     let Some(tls) = tls_cert else {
         return Ok(quiche::Config::new(quiche::PROTOCOL_VERSION).unwrap());
     };
