@@ -78,6 +78,7 @@ async fn handle_connection(mut controller: ServerH3Controller) {
                         .await
                         .unwrap();
                     let request = &incoming_headers.headers;
+                    println!("Received request: {:?}",request);
                     for hdr in request {
                         match hdr.name() {
                             b":path" => {
