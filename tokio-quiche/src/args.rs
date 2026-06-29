@@ -540,10 +540,8 @@ impl Args for ServerArgs {
         let no_retry = args.get_bool("--no-retry");
         let root = args.get_str("--root").to_string();
         let index = args.get_str("--index").to_string();
-        let key =
-            "../../submodules/quiche/tokio-quiche/src/bin/cert.key".to_owned();
-        let cert =
-            "../../submodules/quiche/tokio-quiche/src/bin/cert.crt".to_owned();
+        let key = args.get_str("--key").to_string();
+        let cert = args.get_str("--cert").to_string();
         let disable_gso = args.get_bool("--disable-gso");
         let disable_pacing = args.get_bool("--disable-pacing");
         let enable_pmtud = args.get_bool("--enable-pmtud");
