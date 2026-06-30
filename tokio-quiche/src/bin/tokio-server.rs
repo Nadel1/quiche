@@ -2,7 +2,13 @@ use futures::SinkExt as _;
 use futures::StreamExt as _;
 use quiche::h3::NameValue;
 use quiche::h3::Priority;
+use regex::Regex;
+use std::fs::File;
+use std::io::Seek;
+use std::io::SeekFrom;
+use std::io::Write;
 use std::str::from_utf8;
+use std::str::FromStr;
 use std::time::Duration;
 use tokio_quiche::args::*;
 use tokio_quiche::buf_factory::BufFactory;
@@ -17,6 +23,34 @@ use tokio_quiche::settings::QuicSettings;
 use tokio_quiche::ConnectionParams;
 use tokio_quiche::ServerH3Controller;
 use tokio_quiche::ServerH3Driver;
+
+struct MemRequest(u64);
+
+impl FromStr for MemRequest {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        
+        let r = Regex::new(r"([0-9]+)([a-zA-Z]*)").unwrap();
+        let c = r.captures(s).ok_or(())?;
+        let number = c.get(1).unwrap().as_str().parse::<u64>().map_err(|_| ())?;
+        let unit = c.get(2).unwrap().as_str();
+        println!("str: {:?}, number: {:?}, unit: {:?}",s, number, unit);
+
+        let number = if unit.is_empty() | unit.eq_ignore_ascii_case("B") {
+            number
+        } else if unit.eq_ignore_ascii_case("kB") {
+            number * 1E3 as u64
+        } else if unit.eq_ignore_ascii_case("MB") {
+            number * 1E6 as u64
+        } else if unit.eq_ignore_ascii_case("GB") {
+            number * 1E9 as u64
+        } else {
+            return Err(());
+        };
+        Ok(Self(number))
+    }
+}
 
 #[tokio::main]
 async fn main() -> tokio_quiche::QuicResult<()> {
@@ -78,11 +112,20 @@ async fn handle_connection(mut controller: ServerH3Controller) {
                         .await
                         .unwrap();
                     let request = &incoming_headers.headers;
-                    println!("Received request: {:?}",request);
                     for hdr in request {
                         match hdr.name() {
                             b":path" => {
                                 let path = from_utf8(hdr.value());
+                                let mem_request =
+                                    MemRequest::from_str(path.unwrap_or("")).ok();
+                                println!("path: {:?}",path);
+                                let mut file =
+                                    File::create(path.unwrap()).unwrap();
+                                file.seek(SeekFrom::Start(
+                                    mem_request.unwrap().0,
+                                ))
+                                .unwrap();
+                                file.write_all(&[0]).unwrap();
                                 let body = std::fs::read(path.unwrap())
                                     .unwrap_or_else(|_| {
                                         b"Not Found!\r\n".to_vec()

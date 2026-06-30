@@ -42,6 +42,7 @@ unexpected_cfgs = { level = "warn", check-cfg = ['cfg(capture_keylogs)'] }
 docopt = "1"
 anyhow = { workspace = true }
 boring = { workspace = true }
+regex = "1.10.5"
 buffer-pool = { workspace = true }
 crossbeam = { workspace = true, default-features = false }
 datagram-socket = { workspace = true }
