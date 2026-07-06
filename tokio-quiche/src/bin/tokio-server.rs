@@ -3,6 +3,7 @@ use futures::StreamExt as _;
 use quiche::h3::NameValue;
 use quiche::h3::Priority;
 use regex::Regex;
+use std::fs;
 use std::fs::File;
 use std::io::Seek;
 use std::io::SeekFrom;
@@ -30,12 +31,11 @@ impl FromStr for MemRequest {
     type Err = ();
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        
         let r = Regex::new(r"([0-9]+)([a-zA-Z]*)").unwrap();
         let c = r.captures(s).ok_or(())?;
         let number = c.get(1).unwrap().as_str().parse::<u64>().map_err(|_| ())?;
         let unit = c.get(2).unwrap().as_str();
-        println!("str: {:?}, number: {:?}, unit: {:?}",s, number, unit);
+        println!("str: {:?}, number: {:?}, unit: {:?}", s, number, unit);
 
         let number = if unit.is_empty() | unit.eq_ignore_ascii_case("B") {
             number
@@ -118,7 +118,7 @@ async fn handle_connection(mut controller: ServerH3Controller) {
                                 let path = from_utf8(hdr.value());
                                 let mem_request =
                                     MemRequest::from_str(path.unwrap_or("")).ok();
-                                println!("path: {:?}",path);
+                                println!("path: {:?}", path);
                                 let mut file =
                                     File::create(path.unwrap()).unwrap();
                                 file.seek(SeekFrom::Start(
@@ -138,6 +138,17 @@ async fn handle_connection(mut controller: ServerH3Controller) {
                                     ))
                                     .await
                                     .unwrap();
+                                let remove = fs::remove_file(path.unwrap());
+                                match remove {
+                                    Ok(()) => println!(
+                                        "Successfully removed generated file"
+                                    ),
+
+                                    Err(e) => {
+                                        // Done writing.
+                                        println!("Error while removing generated file: {:?}",e);
+                                    },
+                                };
                             },
                             b":method" => {
                                 assert_eq!(from_utf8(hdr.value()).unwrap(), "GET")
