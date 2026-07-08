@@ -609,6 +609,7 @@ pub struct Config {
 
     initial_rtt: Duration,
     logging_name: String,
+    saved_params_path: String,
 }
 
 // See https://quicwg.org/base-drafts/rfc9000.html#section-15
@@ -686,6 +687,7 @@ impl Config {
             track_unknown_transport_params: None,
             initial_rtt: DEFAULT_INITIAL_RTT,
             logging_name: "test.csv".to_string(),
+            saved_params_path: "saved_params.csv".to_string(),
         })
     }
 
@@ -915,6 +917,11 @@ impl Config {
     /// Sets the log file name
     pub fn set_log_name(&mut self, v: String) {
         self.logging_name = v;
+    }
+
+    /// Sets the saved params path
+    pub fn set_saved_params_path(&mut self, v: String) {
+        self.saved_params_path = v;
     }
 
     /// Sets the `max_udp_payload_size transport` parameter.

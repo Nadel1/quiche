@@ -63,6 +63,7 @@ async fn main() -> tokio_quiche::QuicResult<()> {
     let socket = tokio::net::UdpSocket::bind(bind_to).await?;
     let mut settings = QuicSettings::default();
     settings.logging_name = args.logging_name;
+    settings.saved_params_path = args.saved_params_path;
     settings.initial_rtt = Some(Duration::from_millis(args.initial_rtt));
     settings.max_idle_timeout = Some(Duration::from_millis(args.idle_timeout));
     settings.cc_algorithm = conn_args.cc_algorithm;

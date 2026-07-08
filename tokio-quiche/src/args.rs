@@ -337,6 +337,7 @@ pub struct ClientArgs {
     pub perform_migration: bool,
     pub send_priority_update: bool,
     pub logging_name: String,
+    pub saved_params_path: String,
     pub idle_timeout: u64,
     pub initial_rtt: u64,
 }
@@ -417,7 +418,8 @@ impl Args for ClientArgs {
         let send_priority_update = args.get_bool("--send-priority-update");
 
         let logging_name = args.get_str("--logging-file").to_string();
-        println!("Logging name is {:?}", logging_name);
+
+        let saved_params_path = args.get_str("--saved-params").to_string();
 
         let idle_timeout = args.get_str("--idle-timeout");
         let idle_timeout = idle_timeout.parse::<u64>().unwrap();
@@ -442,6 +444,7 @@ impl Args for ClientArgs {
             perform_migration,
             send_priority_update,
             logging_name,
+            saved_params_path,
             idle_timeout,
             initial_rtt,
         }
@@ -467,6 +470,7 @@ impl Default for ClientArgs {
             perform_migration: false,
             send_priority_update: false,
             logging_name: "client.csv".to_string(),
+            saved_params_path: "saved_params.csv".to_string(),
             idle_timeout: 30000,
             initial_rtt: 333,
         }
@@ -528,6 +532,7 @@ pub struct ServerArgs {
     pub disable_pacing: bool,
     pub enable_pmtud: bool,
     pub logging_name: String,
+    pub saved_params_path: String,
     pub idle_timeout: u64,
     pub initial_rtt: u64,
 }
@@ -547,6 +552,7 @@ impl Args for ServerArgs {
         let enable_pmtud = args.get_bool("--enable-pmtud");
 
         let logging_name = args.get_str("--logging-file").to_string();
+        let saved_params_path = args.get_str("--saved-params").to_string();
 
         let idle_timeout = args.get_str("--idle-timeout");
         let idle_timeout = idle_timeout.parse::<u64>().unwrap();
@@ -565,6 +571,7 @@ impl Args for ServerArgs {
             disable_pacing,
             enable_pmtud,
             logging_name,
+            saved_params_path,
             idle_timeout,
             initial_rtt,
         }

@@ -156,6 +156,7 @@ pub struct RecoveryConfig {
     pub initial_congestion_window_packets: usize,
     pub enable_relaxed_loss_threshold: bool,
     pub logging_name:String,
+    pub saved_params_path:String,
 }
 
 impl RecoveryConfig {
@@ -173,6 +174,7 @@ impl RecoveryConfig {
                 .initial_congestion_window_packets,
             enable_relaxed_loss_threshold: config.enable_relaxed_loss_threshold,
             logging_name:config.logging_name.clone(),
+            saved_params_path:config.saved_params_path.clone(),
         }
     }
 }

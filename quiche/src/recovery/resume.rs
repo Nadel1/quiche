@@ -11,7 +11,6 @@ use std::u64;
 use std::fs;
 use std::path::Path;
 
-const SAVED_CC_FILE: &str = "saved_params.csv";
 const PARAMS_MAXIMUM_GAP: Duration = Duration::from_secs(120 * 60);
 
 // No observe state as that always applies to the saved connection and never the
@@ -61,7 +60,7 @@ impl Resume {
 
         let mut saved_cwnd = 0;
         let mut saved_time = Duration::ZERO;
-        if Path::new(SAVED_CC_FILE).exists() {
+        if Path::new(file_name).exists() {
             let file_contents = fs::read_to_string(file_name).unwrap();
 
             let file_array: Vec<&str> = file_contents.split(',').collect();

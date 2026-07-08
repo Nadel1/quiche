@@ -328,8 +328,13 @@ pub struct QuicSettings {
     #[serde(default = "QuicSettings::default_initial_rtt")]
     pub initial_rtt: Option<Duration>,
 
+    /// Logging name for later data evaluation
     #[serde(default = "QuicSettings::default_logging_name")]
     pub logging_name: String,
+
+    /// Modify where saved params can be found, used for careful resume
+    #[serde(default = "QuicSettings::default_saved_params_path")]
+    pub saved_params_path: String,
 }
 
 impl QuicSettings {
@@ -468,6 +473,11 @@ impl QuicSettings {
     #[inline]
     fn default_logging_name() -> String {
         "default_log.csv".to_string()
+    }
+
+    #[inline]
+    fn default_saved_params_path() -> String {
+        "saved_params.csv".to_string()
     }
 }
 
