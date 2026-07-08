@@ -315,6 +315,7 @@ Options:
   --initial-cwnd-packets PACKETS   The initial congestion window size in terms of packet count [default: 10].
   --max-ack-delay MILLIS   Max ack delay
   --logging-file FILE      Log file name
+  --saved-params FILE      Saved params file for careful resume
   -h --help                Show this screen.
   
 ";
@@ -516,6 +517,7 @@ Options:
   --initial-cwnd-packets PACKETS      The initial congestion window size in terms of packet count [default: 10].
   --max-ack-delay MILLIS      Max ack delay
   --logging-file FILE         Log file namec
+  --saved-params FILE         Saved params file for careful resume
   -h --help                   Show this screen.
   
 ";
