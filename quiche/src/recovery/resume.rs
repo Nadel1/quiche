@@ -38,6 +38,7 @@ pub struct Resume {
     pub total_acked: usize,
     cwnd: usize,
     rtt: Option<Duration>,
+    saved_params_path: String,
 }
 
 impl std::fmt::Debug for Resume {
@@ -115,6 +116,7 @@ impl Resume {
             total_acked: 0,
             rtt: Some(Duration::ZERO),
             cwnd: 0,
+            saved_params_path: file_name.to_owned(),
         }
     }
 
@@ -122,7 +124,6 @@ impl Resume {
         if self.enabled {
             self.cr_state != CrState::Normal
         } else {
-
             if self.cr_state != CrState::Normal {
                 self.change_state(CrState::Normal);
             }
@@ -161,12 +162,8 @@ impl Resume {
         self.cr_state = state;
     }
 
-    pub fn get_pipesize(&self) -> usize {
-        self.pipesize
-    }
-
-    pub fn get_jump_cwnd(&self) -> usize {
-        self.jump_cwnd
+    pub fn get_saved_params_path(&self) -> &String {
+        &self.saved_params_path
     }
 
     pub fn set_saved_rtt(&mut self, new_rtt: u64) {
@@ -182,12 +179,12 @@ impl Resume {
         &mut self, largest_pkt_sent: u64, packet: &Acked, flightsize: usize,
         iw_acked: bool,
     ) -> (Option<usize>, Option<usize>) {
-        println!("In process_ack in own resume, state: {:?}",self.cr_state);
+        println!("In process_ack in own resume, state: {:?}", self.cr_state);
         self.total_acked += 1; // this was used by the other implementation: packet.size; but doesnt make
                                // too much sense here: after all the iw is saved in packets not bytes
         match self.cr_state {
-            CrState::Reconnaissance=>{
-                println!("in process ack in recon, iw_acked is {:?}",iw_acked);
+            CrState::Reconnaissance => {
+                println!("in process ack in recon, iw_acked is {:?}", iw_acked);
                 if iw_acked {
                     self.change_state(CrState::Unvalidated(largest_pkt_sent));
                     self.in_state_timer = Instant::now();
@@ -258,7 +255,7 @@ impl Resume {
         &mut self, rtt_sample: Option<Duration>, cwnd: usize,
         largest_pkt_sent: u64, app_limited: bool, iw_acked: bool,
     ) -> usize {
-        println!("In send_packet in own resume, state: {:?}",self.cr_state);
+        println!("In send_packet in own resume, state: {:?}", self.cr_state);
         self.cwnd = cwnd;
         self.rtt = rtt_sample;
         // Do nothing when data limited to avoid having insufficient data
@@ -300,7 +297,7 @@ impl Resume {
                     self.change_state(CrState::Normal);
                     return 0;
                 }
-                println!("---jump cwnd: {:?}----",self.jump_cwnd);
+                println!("---jump cwnd: {:?}----", self.jump_cwnd);
                 return self.jump_cwnd;
             },
 

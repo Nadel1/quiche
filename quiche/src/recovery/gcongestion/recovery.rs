@@ -55,7 +55,6 @@ use super::Lost;
 
 // Congestion Control
 const MAX_WINDOW_PACKETS: usize = 20_000;
-const SAVED_CC_FILE: &str = "saved_params.csv";
 #[derive(Debug)]
 struct SentPacket {
     pkt_num: u64,
@@ -581,15 +580,15 @@ impl GRecovery {
 
             newly_acked: Vec::new(),
             lost_reuse: Vec::new(),
-            resume: resume::Resume::new(SAVED_CC_FILE),
+            resume: resume::Resume::new(&recovery_config.saved_params_path),
             last_ack_time: None,
         })
     }
 
     fn calculate_saved_params(&mut self, rtt: u64, min_rtt: u64) {
         // rtt as low as possible, cwnd as high as  possible
-
-        if Path::new(SAVED_CC_FILE).exists() {
+        let path = self.resume.get_saved_params_path();
+        if Path::new(path).exists() {
             let mut saved_cwnd = self.resume.get_saved_cwnd();
             let mut saved_rtt = self.resume.get_saved_rtt();
 
@@ -609,12 +608,12 @@ impl GRecovery {
                 self.write_params_to_file(saved_rtt, saved_cwnd as usize);
             }
         } else {
-            File::create(SAVED_CC_FILE).unwrap();
+            File::create(path).unwrap();
         }
     }
 
     fn write_params_to_file(&mut self, saved_rtt: u64, saved_cwnd: usize) {
-        let mut file = File::create(SAVED_CC_FILE).unwrap();
+        let mut file = File::create(self.resume.get_saved_params_path()).unwrap();
         let mut save_string = "SAVED_RTT,".to_owned();
         save_string.push_str(&saved_rtt.to_string());
         save_string.push_str(",SAVED_CWND,");
@@ -804,7 +803,7 @@ impl RecoveryOps for GRecovery {
         {
             let bytes_acked = self.resume.total_acked;
             let iw_acked = bytes_acked >= self.pacer.get_initial_cwnd();
-            
+
             // Increase the congestion window by a jump determined by careful
             // resume
             self.pacer.set_congestion_window(self.resume.send_packet(
@@ -1124,9 +1123,9 @@ impl RecoveryOps for GRecovery {
                         );
                     },
                 }
-                self.resume
-                .congestion_event(self.lost_reuse.get(0).unwrap().packet_number);
-
+                self.resume.congestion_event(
+                    self.lost_reuse.get(0).unwrap().packet_number,
+                );
             } else {
                 // this method also updates the cwnd
                 self.pacer.on_congestion_event(
@@ -1143,7 +1142,6 @@ impl RecoveryOps for GRecovery {
                 );
             }
 
-            
             self.lost_count += lost_packets;
 
             self.set_loss_detection_timer(handshake_status, now);
@@ -1465,9 +1463,9 @@ impl RecoveryOps for GRecovery {
             .min(64 * 1024)
             .max(floor as u64) as usize
     }
-    
+
     #[cfg(feature = "qlog")]
-    fn state_str(&self,now: Instant) ->  &'static str {
+    fn state_str(&self, now: Instant) -> &'static str {
         todo!()
     }
 }

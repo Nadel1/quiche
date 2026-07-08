@@ -31,18 +31,16 @@ use std::time::Instant;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 
-use crate::recovery::Acked;
 use super::bandwidth::Bandwidth;
 use super::RecoveryConfig;
 use super::Sent;
 use crate::recovery::resume;
 use crate::recovery::rtt;
 use crate::recovery::rtt::RttStats;
+use crate::recovery::Acked;
 use crate::recovery::CongestionControlAlgorithm;
 use crate::StartupExit;
 use crate::StartupExitReason;
-
-const SAVED_CC_FILE: &str = "saved_params.csv";
 
 pub struct SsThresh {
     // Current slow start threshold.  Defaults to usize::MAX which
@@ -165,7 +163,7 @@ impl Congestion {
 
             prr: prr::PRR::default(),
 
-            resume: resume::Resume::new(SAVED_CC_FILE),
+            resume: resume::Resume::new(&recovery_config.saved_params_path),
         };
 
         (cc.cc_ops.on_init)(&mut cc);
@@ -202,7 +200,7 @@ impl Congestion {
     fn calculate_saved_params(&mut self, rtt_stats: &RttStats) {
         // rtt as low as possible, cwnd as high as  possible
 
-        if Path::new(SAVED_CC_FILE).exists() {
+        if Path::new(self.resume.get_saved_params_path()).exists() {
             let mut saved_cwnd = self.resume.get_saved_cwnd();
             let mut saved_rtt = self.resume.get_saved_rtt();
 
@@ -223,12 +221,12 @@ impl Congestion {
                 self.write_params_to_file(saved_rtt, saved_cwnd as usize);
             }
         } else {
-            File::create(SAVED_CC_FILE).unwrap();
+            File::create(self.resume.get_saved_params_path()).unwrap();
         }
     }
 
     fn write_params_to_file(&mut self, saved_rtt: u64, saved_cwnd: usize) {
-        let mut file = File::create(SAVED_CC_FILE).unwrap();
+        let mut file = File::create(self.resume.get_saved_params_path()).unwrap();
         let mut save_string = "SAVED_RTT,".to_owned();
         save_string.push_str(&saved_rtt.to_string());
         save_string.push_str(",SAVED_CWND,");
