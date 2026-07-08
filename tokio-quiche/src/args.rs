@@ -63,6 +63,7 @@ pub struct CommonArgs {
     pub initial_rtt: Duration,
     pub initial_cwnd_packets: u64,
     pub logging_name: String,
+    pub saved_params_path: String,
 }
 
 /// Creates a new `CommonArgs` structure using the provided [`Docopt`].
@@ -209,7 +210,7 @@ impl Args for CommonArgs {
             .unwrap();
 
         let logging_name = args.get_str("--logging-file");
-        println!("----logging name in args is {:?}-----", logging_name);
+        let saved_params_path = args.get_str("--saved-params");
         CommonArgs {
             alpns,
             max_data,
@@ -235,6 +236,7 @@ impl Args for CommonArgs {
             initial_rtt,
             initial_cwnd_packets,
             logging_name: logging_name.to_string(),
+            saved_params_path: saved_params_path.to_string(),
         }
     }
 }
@@ -266,6 +268,7 @@ impl Default for CommonArgs {
             initial_rtt: Duration::from_millis(333),
             initial_cwnd_packets: 10,
             logging_name: "default.csv".to_string(),
+            saved_params_path: "saved_params.csv".to_string(),
         }
     }
 }

@@ -47,6 +47,7 @@ async fn main() -> tokio_quiche::QuicResult<()> {
     let mut params =
         ConnectionParams::new_client(settings, None, Default::default());
     params.settings.logging_name = conn_args.logging_name;
+    params.settings.saved_params_path = conn_args.saved_params_path;
     params.settings.initial_rtt = Some(Duration::from_millis(args.initial_rtt));
     params.settings.cc_algorithm = conn_args.cc_algorithm;
     params.settings.max_idle_timeout =
