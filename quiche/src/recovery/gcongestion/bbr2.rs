@@ -506,7 +506,7 @@ impl BBRv2 {
     pub fn new(
         initial_congestion_window: usize, max_congestion_window: usize,
         max_segment_size: usize, smoothed_rtt: Duration,
-        custom_bbr_params: Option<&BbrParams>
+        custom_bbr_params: Option<&BbrParams>,
     ) -> Self {
         let cwnd = initial_congestion_window * max_segment_size;
 
@@ -517,10 +517,7 @@ impl BBRv2 {
         };
 
         BBRv2 {
-            mode: Mode::startup(BBRv2NetworkModel::new(
-                &params,
-                smoothed_rtt,
-            )),
+            mode: Mode::startup(BBRv2NetworkModel::new(&params, smoothed_rtt)),
             cwnd,
             pacing_rate: initial_pacing_rate(cwnd, smoothed_rtt, &params),
             cwnd_limits: Limits {
@@ -764,9 +761,8 @@ impl CongestionControl for BBRv2 {
         if congestion_event.bytes_in_flight == 0 &&
             self.params.avoid_unnecessary_probe_rtt
         {
-            let delta = event_time -
-                self.idle_start.unwrap_or(event_time) -
-                rtt_stats.latest_rtt;
+            let delta = (event_time - self.idle_start.unwrap_or(event_time))
+                .saturating_sub(rtt_stats.latest_rtt);
             if delta.as_nanos() > 0 {
                 self.on_enter_quiescence(event_time);
             }
@@ -999,7 +995,7 @@ mod tests {
             MAX_WINDOW_PACKETS,
             INIT_PACKET_SIZE,
             initial_rtt,
-            Some(bbr_params)
+            Some(bbr_params),
         );
 
         assert_eq!(bbr2.cwnd_limits.lo, INIT_CWND);
