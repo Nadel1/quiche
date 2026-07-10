@@ -28,12 +28,9 @@
 // NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::fs::File;
 use std::ops::Add;
 use std::time::Duration;
 use std::time::Instant;
-use std::time::SystemTime;
-use std::time::UNIX_EPOCH;
 
 use crate::recovery::gcongestion::bbr::BandwidthSampler;
 use crate::recovery::gcongestion::bbr2::Params;
@@ -197,9 +194,7 @@ pub(super) struct BBRv2NetworkModel {
 }
 
 impl BBRv2NetworkModel {
-    pub(super) fn new(
-        params: &Params, initial_rtt: Duration
-    ) -> Self {
+    pub(super) fn new(params: &Params, initial_rtt: Duration) -> Self {
         BBRv2NetworkModel {
             min_bytes_in_flight_in_round: usize::MAX,
             inflight_hi_limited_in_round: false,

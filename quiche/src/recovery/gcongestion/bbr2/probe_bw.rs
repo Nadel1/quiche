@@ -62,17 +62,6 @@ enum AdaptUpperBoundsResult {
 }
 
 impl ModeImpl for ProbeBW {
-    #[cfg(feature = "qlog")]
-    fn state_str(&self) -> &'static str {
-        match self.cycle.phase {
-            CyclePhase::NotStarted => unreachable!(),
-            CyclePhase::Up => "bbr_probe_bw_up",
-            CyclePhase::Down => "bbr_probe_bw_down",
-            CyclePhase::Cruise => "bbr_probe_bw_cruise",
-            CyclePhase::Refill => "bbr_probe_bw_refill",
-        }
-    }
-
     fn enter(
         &mut self, now: Instant,
         _congestion_event: Option<&BBRv2CongestionEvent>, params: &Params,
@@ -658,10 +647,7 @@ mod tests {
     fn probe_phase_stuck() {
         let cycle = Cycle::default();
         let params = &DEFAULT_PARAMS;
-        let model = BBRv2NetworkModel::new(
-            params,
-            Duration::from_millis(333)
-        );
+        let model = BBRv2NetworkModel::new(params, Duration::from_millis(333));
         let mut probe_bw = ProbeBW { model, cycle };
         let cwnd = MAX_DATAGRAM_SIZE;
         probe_bw.enter_probe_up(probe_bw.cycle.start_time, cwnd);
@@ -734,10 +720,7 @@ mod tests {
         };
 
         let params = &DEFAULT_PARAMS;
-        let model = BBRv2NetworkModel::new(
-            params,
-            Duration::from_millis(333)
-        );
+        let model = BBRv2NetworkModel::new(params, Duration::from_millis(333));
         let cycle = Cycle::default();
         let mut probe_bw = ProbeBW { model, cycle };
         probe_bw.model.set_inflight_hi(100_000);

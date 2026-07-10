@@ -49,11 +49,6 @@ pub(super) struct Startup {
 }
 
 impl ModeImpl for Startup {
-    #[cfg(feature = "qlog")]
-    fn state_str(&self) -> &'static str {
-        "bbr_startup"
-    }
-
     fn is_probing_for_bandwidth(&self) -> bool {
         true
     }
@@ -65,7 +60,6 @@ impl ModeImpl for Startup {
         _target_bytes_inflight: usize, params: &Params,
         recovery_stats: &mut RecoveryStats, cwnd: usize,
     ) -> Mode {
-    
         if self.model.full_bandwidth_reached() {
             return self.into_drain(event_time, Some(congestion_event), params);
         }

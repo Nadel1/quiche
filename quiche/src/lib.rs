@@ -2268,6 +2268,7 @@ impl<F: BufFactory> Connection<F> {
         self.encode_transport_params()
     }
 
+    /// Writes ddefined logging values to a preset log file to allow evaluation.
     pub fn write_to_log(&self, sent: bool, logging_values: Vec<u128>) {
         use std::io::Write;
         if self.logging_name == "" {

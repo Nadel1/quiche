@@ -1465,7 +1465,7 @@ impl RecoveryOps for GRecovery {
     }
 
     #[cfg(feature = "qlog")]
-    fn state_str(&self, now: Instant) -> &'static str {
+    fn state_str(&self, _now: Instant) -> &'static str {
         todo!()
     }
 }

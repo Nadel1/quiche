@@ -659,10 +659,6 @@ impl BBRv2 {
 }
 
 impl CongestionControl for BBRv2 {
-    #[cfg(feature = "qlog")]
-    fn state_str(&self) -> &'static str {
-        self.mode.state_str()
-    }
 
     fn get_congestion_window(&self) -> usize {
         self.cwnd
