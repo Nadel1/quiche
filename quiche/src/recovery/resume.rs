@@ -97,7 +97,7 @@ impl Resume {
                     println!("Saved parameters found, but outdated, abort CR!");
                     enabled = false;
                 }
-                println!("cr is enabled!");
+                println!("cr is enabled: {:?}!", enabled);
             } else {
                 enabled = false;
             }
