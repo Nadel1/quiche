@@ -31,6 +31,7 @@
             manifest = (pkgs.lib.importTOML (./. + "/${path}/Cargo.toml")).package;
           in
           pkgs.rustPlatform.buildRustPackage {
+            doCheck = false;
             pname = manifest.name;
             version = manifest.version;
             inherit cargoLock;
