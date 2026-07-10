@@ -82,7 +82,7 @@ impl Resume {
                     println!("Didnt find cwnd");
                 }
 
-                let time_string = file_array[5];
+                let time_string = file_array[file_array.len()-1];
                 if let Ok(time_int) = time_string.parse::<u64>() {
                     saved_time =
                         Duration::from_secs(time_int.try_into().unwrap());

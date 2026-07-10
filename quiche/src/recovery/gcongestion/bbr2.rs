@@ -834,10 +834,7 @@ impl CongestionControl for BBRv2 {
 
 #[cfg(test)]
 mod tests {
-    use std::cmp;
-
     use crate::packet;
-    use crate::ranges::RangeSet;
     use crate::recovery::gcongestion::test_sender::TestSender;
     use crate::recovery::HandshakeStatus;
     use crate::recovery::RecoveryOps;

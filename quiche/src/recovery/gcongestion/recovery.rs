@@ -1484,8 +1484,6 @@ impl std::fmt::Debug for GRecovery {
 mod tests {
     use super::*;
     use crate::packet::Epoch;
-    use crate::ranges;
-    use crate::recovery::gcongestion::recovery;
     use crate::Config;
 
     #[test]
@@ -1551,38 +1549,14 @@ mod tests {
         let largest_ack = 2;
         let mut newly_acked = Vec::<Acked>::new();
         ranges.insert(smallest_ack..largest_ack + 1);
-        let mut epochs: [RecoveryEpoch; Epoch::count()] = Default::default();
+        let epochs: [RecoveryEpoch; Epoch::count()] = Default::default();
         let epoch = Epoch::Application;
         let trace_id = "0";
-        const MAX_DATAGRAM_SIZE: usize = 1350;
         let config = Config::new(1).unwrap();
-        let mut recovery_config = recovery::RecoveryConfig::from_config(&config);
+        let mut recovery_config = RecoveryConfig::from_config(&config);
         recovery_config.cc_algorithm =
             CongestionControlAlgorithm::Bbr2Gcongestion;
         let mut recovery = GRecovery::new(&recovery_config).unwrap();
-        let mut sent_packets: VecDeque<SentPacket> = [
-            SentPacket {
-                pkt_num: 0,
-                status: SentStatus::Acked,
-            },
-            SentPacket {
-                pkt_num: 1,
-                status: SentStatus::Acked,
-            },
-            SentPacket {
-                pkt_num: 2,
-                status: SentStatus::Sent {
-                    sent_bytes: 42,
-                    time_sent: Instant::now(),
-                    ack_eliciting: true,
-                    in_flight: true,
-                    has_data: true,
-                    is_pmtud_probe: false,
-                    frames: SmallVec::new(),
-                },
-            },
-        ]
-        .into();
 
         recovery.epochs = epochs;
 
@@ -1611,9 +1585,9 @@ mod tests {
         epoch.pkts_in_flight = 3;
         let AckedDetectionResult {
             acked_bytes,
-            spurious_losses,
-            spurious_pkt_thresh,
-            has_ack_eliciting,
+            spurious_losses: _,
+            spurious_pkt_thresh: _,
+            has_ack_eliciting: _,
         } = epoch
             .detect_and_remove_acked_packets(
                 &ranges,

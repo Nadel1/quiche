@@ -633,14 +633,11 @@ impl ProbeBW {
 
 #[cfg(test)]
 mod tests {
-    use libc::sleep;
     use rstest::rstest;
 
     use super::*;
     use crate::recovery::gcongestion::bbr2::SendTimeState;
     use crate::recovery::gcongestion::bbr2::DEFAULT_PARAMS;
-    use crate::recovery::Bandwidth;
-
     const MAX_DATAGRAM_SIZE: usize = 1350;
 
     #[rstest]

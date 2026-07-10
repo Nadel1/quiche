@@ -33,15 +33,13 @@ use std::time::Instant;
 use super::Acked;
 use crate::packet;
 use crate::ranges::RangeSet;
-use crate::recovery::gcongestion::CongestionControl;
 use crate::recovery::gcongestion::GRecovery;
-use crate::recovery::rtt::RttStats;
+
 use crate::recovery::HandshakeStatus;
 use crate::recovery::RecoveryConfig;
 use crate::recovery::RecoveryOps;
 use crate::recovery::Sent;
 use crate::CongestionControlAlgorithm;
-use crate::DEFAULT_INITIAL_RTT;
 use std::fs;
 
 pub(crate) struct TestSender {
@@ -50,7 +48,6 @@ pub(crate) struct TestSender {
     pub(crate) next_ack: u64,
     pub(crate) bytes_in_flight: usize,
     pub(crate) time: Instant,
-    rtt_stats: RttStats,
     sent_packets: VecDeque<Sent>,
 }
 
@@ -65,10 +62,6 @@ impl TestSender {
             next_ack: 0,
             bytes_in_flight: 0,
             time: Instant::now(),
-            rtt_stats: RttStats::new(
-                DEFAULT_INITIAL_RTT,
-                Duration::from_micros(0),
-            ),
             cc: GRecovery::new(&RecoveryConfig::from_config(&cfg)).unwrap(),
             sent_packets: VecDeque::new(),
         }
@@ -143,30 +136,6 @@ impl TestSender {
             &"".to_ascii_lowercase(),
         );
         self.bytes_in_flight -= n * bytes;
-    }
-
-    pub(crate) fn lose_n_packets(
-        &mut self, n: usize, bytes: usize, time_sent: Option<Instant>,
-    ) {
-        let mut unacked = None;
-
-        for _ in 0..n {
-            self.next_ack += 1;
-            unacked = self.sent_packets.pop_front();
-        }
-
-        let mut unacked = unacked.unwrap();
-        if let Some(time) = time_sent {
-            unacked.time_sent = time;
-        }
-
-        self.cc.lost_count += n;
-        self.bytes_in_flight -= n * bytes;
-    }
-
-    pub(crate) fn update_rtt(&mut self, rtt: Duration) {
-        self.rtt_stats
-            .update_rtt(rtt, Duration::ZERO, self.time, true)
     }
 
     pub(crate) fn advance_time(&mut self, period: Duration) {
