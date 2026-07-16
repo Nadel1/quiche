@@ -93,10 +93,7 @@ async fn main() -> tokio_quiche::QuicResult<()> {
                                     "fin" => fin,
                                     "len" => pooled.len()
                                 );
-                                println!(
-                                    "Client received: {}",
-                                    std::str::from_utf8(&pooled).unwrap()
-                                );
+                                println!("Client received: {}", pooled.len());
 
                                 if fin {
                                     println!("received full body, exiting");
@@ -116,7 +113,7 @@ async fn main() -> tokio_quiche::QuicResult<()> {
                     println!("fin received");
                     break;
                 },
-                ClientH3Event::Core(_event) =>{},
+                ClientH3Event::Core(_event) => {},
                 ClientH3Event::NewOutboundRequest {
                     stream_id,
                     request_id,
